@@ -18,7 +18,7 @@ const STATUS_STYLES = {
  * Opcional: filtrar por disciplina (ex: só MATEMATICA na tela de Matemática)
  *   <HistoricoProvasCard alunoId={aluno.id} disciplinaFiltro="MATEMATICA" />
  */
-export default function HistoricoProvasCard({ alunoId, alunoNome, aluno, disciplinaFiltro }) {
+export default function HistoricoProvasCard({ alunoId, alunoNome, aluno, disciplinaFiltro, onAtualizar }) {
   const [aberto, setAberto] = useState(false)
   const [carregando, setCarregando] = useState(false)
   const [provas, setProvas] = useState(null)
@@ -57,6 +57,9 @@ export default function HistoricoProvasCard({ alunoId, alunoNome, aluno, discipl
   function fechar() {
     setAberto(false)
     setEditandoProvaId(null)
+    if (onAtualizar){
+      onAtualizar()
+    }
   }
 
   function iniciarEdicaoProva(prova) {

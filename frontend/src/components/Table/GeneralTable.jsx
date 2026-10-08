@@ -213,6 +213,7 @@ function RelatorioDataProvider({ render }) {
       cancelarEdicao,
       salvarEdicao,
       setBusca,
+      carregarAlunos,
     }
   })
 }
@@ -222,7 +223,7 @@ export default function GeneralTable() {
     <RelatorioDataProvider 
       render={({ state, actions }) => {
         const { alunos, loading, pagina, totalPaginas, editandoId, valoresEdicao, salvando, busca } = state;
-        const { setPagina, iniciarEdicao, cancelarEdicao, salvarEdicao, setBusca, setValoresEdicao } = actions;
+        const { setPagina, iniciarEdicao, cancelarEdicao, salvarEdicao, setBusca, setValoresEdicao, carregarAlunos } = actions;
 
         return (
           // 3. Contêiner raiz para prevenir vazamento de layout: max-w-full com grid isolado.
@@ -242,16 +243,36 @@ export default function GeneralTable() {
                   
                   {/* Cabeçalho da tabela */}
                   <div className="flex items-center gap-2 px-3 py-2 bg-slate-50/75 border-b border-slate-200">
-                    <div className="w-8 text-start text-xs font-semibold text-gray-900 uppercase tracking-wide">RA</div>
-                    <div className="w-58 pl-6 flex items-center gap-1 text-xs font-semibold text-gray-600 uppercase tracking-wide">Nome</div>
-                    <div className="w-50 text-xs text-start font-semibold text-gray-600 uppercase tracking-wide">Email</div>
-                    <div className="w-24 text-xs text-center font-semibold text-gray-600 uppercase tracking-wide">nota Mat</div>
-                    <div className="w-24 text-xs text-center font-semibold text-gray-600 uppercase tracking-wide">nota Port</div>
-                    <div className="w-28 flex items-center gap-1 text-xs font-semibold text-gray-600 uppercase tracking-wide">Status</div>
-                    <div className="w-20 text-right mr-7 text-xs font-semibold text-gray-600 uppercase tracking-wide">Data Prova</div>
-                    <div className="w-20 text-right mr-8 text-xs font-semibold text-gray-600 uppercase tracking-wide">Curso</div>
-                    <div className="w-24 text-start text-xs font-semibold text-gray-600 uppercase tracking-wide">% de Curso</div>
-                    <div className="w-16 text-start text-xs font-semibold text-gray-600 uppercase tracking-wide">Ações</div>
+                    <div className="w-8 text-center text-xs font-semibold text-gray-900 uppercase tracking-wide">
+                      RA
+                    </div>
+                    <div className="w-58 pl-6 flex items-center gap-1 text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                      Nome
+                    </div>
+                    <div className="w-50 text-xs text-start font-semibold text-gray-600 uppercase tracking-wide">
+                      Email
+                    </div>
+                    <div className="w-24 text-xs text-center font-semibold text-gray-600 uppercase tracking-wide">
+                      nota Mat
+                    </div>
+                    <div className="w-24 text-xs text-center font-semibold text-gray-600 uppercase tracking-wide">
+                      nota Port
+                    </div>
+                    <div className="w-22 flex items-center pl-2 text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                      Status
+                    </div>
+                    <div className="w-28 text-right mr-7 text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                      Data Prova
+                    </div>
+                    <div className="w-20 text-end mr-5 text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                      Curso
+                    </div>
+                    <div className="w-24 text-end text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                      % de Curso
+                    </div>
+                    <div className="w-16 text-end text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                      Ações
+                    </div>
                   </div>
 
                   {loading ? (
@@ -309,23 +330,24 @@ export default function GeneralTable() {
                             </div>
 
                             {/* Nota Matemática */}
-                            <div className="w-20 text-sm text-[var(--text-dark)]">
+                            <div className="w-20 text-sm text-center text-[var(--text-dark)]">
                               <span className="truncate block">{aluno.notaMatematica}</span>
                             </div>
 
                             {/* Nota Português */}
-                            <div className="w-20 text-sm text-[var(--text-dark)]">
+                            <div className="w-20 text-sm text-center text-[var(--text-dark)]">
                               <span className="truncate block">{aluno.notaPortugues}</span>
                             </div>
 
                             {/* Status */}
-                            <div className="w-12">
+                            <div className="w-18">
                               <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLES[aluno.status]}`}>
                                 {aluno.status}
                               </span>
                             </div>
                             
-                            <div className="w-28 text-right text-sm text-[var(--text-dark)]">
+                            {/* Data Prova */}
+                            <div className="w-22 text-end text-sm text-[var(--text-dark)]">
                               {aluno.anoRealizacaoProva || '—'}
                             </div>
                             <div className="w-28 text-right text-sm text-[var(--text-dark)]">{aluno.curso}</div>
@@ -366,7 +388,11 @@ export default function GeneralTable() {
 
                         {/* Histórico de provas por semestre */}
                         <div className={`pl-19 botao-historico ${index % 2 === 1 ? 'bg-gray-50' : 'bg-white'}`}>
-                          <HistoricoProvasCard alunoId={aluno.id} alunoNome={aluno.nome} />
+                          <HistoricoProvasCard 
+                            alunoId={aluno.id} 
+                            alunoNome={aluno.nome} 
+                            onAtualizar={carregarAlunos}
+                          />
                         </div>
                               
                           
