@@ -63,6 +63,32 @@ class HistoricoProva(models.Model):
             )
         ]
 
+    def save(self, *args, **kwargs):
+        # 1. Salva a nova nota da prova primeiro na base de dados
+        super().save(*args, **kwargs)
+
+        # 2. Puxa o aluno associado a esta prova
+        aluno = self.aluno
+
+        # 3. Atualiza a nota global do aluno
+        if self.disciplina == 'MATEMATICA':
+            aluno.nota_matematica = self.nota
+        elif self.disciplina == 'PORTUGUES':
+            aluno.nota_portugues = self.nota
+
+        # 4. Regra de aprovação: Ambas as notas devem existir e ser >= 7
+        if aluno.nota_matematica is not None and aluno.nota_portugues is not None:
+            if aluno.nota_matematica >= 7 and aluno.nota_portugues >= 7:
+                aluno.aprovado_geral = True
+            else:
+                aluno.aprovado_geral = False
+        else:
+            # Falta nota, fica reprovado/pendente
+            aluno.aprovado_geral = False
+
+        # 5. Guarda o estado final no perfil do Aluno
+        aluno.save()
+
     def __str__(self):
         return f"{self.aluno.nome} - {self.disciplina} - {self.semestre_prova}"
 

@@ -49,7 +49,8 @@ class HistoricoProvaViewSet(viewsets.ModelViewSet):
         if aluno_id:
             qs = qs.filter(aluno_id=aluno_id)
 
-        return qs
+        return qs   
+        
 
 
 class UploadPlanilhaMoodleView(APIView):
