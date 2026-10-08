@@ -66,3 +66,12 @@ def importar_planilha_moodle(caminho_arquivo, disciplina, semestre_prova):
             resumo["erros"].append({"aluno": dado["email"], "erro": str(erro)})
 
     return resumo
+
+def enviar_avisos_prova(historico_prova):
+    """
+    Envia um aviso (e-mail/notificação) ao aluno sobre o resultado
+    da prova registrada em HistoricoProva.
+    """
+    aluno = historico_prova.aluno
+    # TODO: integrar com envio real de e-mail/notificação
+    print(f"Aviso enviado para {aluno.email}: nota {historico_prova.nota}")
