@@ -1,7 +1,10 @@
+// Prazo de 75%
 import { useState, useEffect } from 'react'
 import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom' 
 import SearchBar from '../../components/Searchbar/SearchBar' 
+import api from '../../services/api'
+
 
 
 // 👇 Mapeia o status pra cor do badge (evita repetir lógica de cor em cada linha)
@@ -9,49 +12,6 @@ const STATUS_STYLES = {
   Aprovado: 'bg-green-100 text-green-700',
   Reprovado: 'bg-red-50 text-rose-600',
 }
-
-const alunosMock = [
-  {
-    id: 1,
-    ra: 1,
-    nome: 'Ann Culhane',
-    email: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla...',
-    status: 'Aprovado',
-    anoAprovacao: '2024.1',
-    curso: 'ADS',
-    percentualCurso: 50,
-  },
-  {
-    id: 2,
-    ra: 2,
-    nome: 'Ahmad Rosser',
-    email: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla...',
-    status: 'Reprovado',
-    anoAprovacao: '2024.2',
-    curso: 'ADS',
-    percentualCurso: 50,
-  },
-  {
-    id: 3,
-    ra: 3,
-    nome: 'Zain Calzoni',
-    email: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla...',
-    status: 'Reprovado',
-    anoAprovacao: '',
-    curso: 'ADS',
-    percentualCurso: 50,
-  },
-  {
-    id: 4,
-    ra: 4,
-    nome: 'Omar Levin',
-    email: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla...',
-    status: 'Aprovado',
-    anoAprovacao: '2024.2',
-    curso: 'ADS',
-    percentualCurso: 75,
-  },
-]
 
 function StatCard({ title, value, subvalue, children }) {
   return (
@@ -73,36 +33,53 @@ export default function Porcent75() {
     const [ordenacao, setOrdenacao] = useState({ campo: 'ra', direcao: 'asc' })
     const [loading, setLoading] = useState(true)
 
-    const ITENS_POR_PAGINA = 6000
 
     const [searchParams, setSearchParams] = useSearchParams()
     const busca = searchParams.get('busca') ?? ''
 
     useEffect(() => {
-      setAlunos(alunosMock)
-      setLoading(false)
-    }, [])
+    async function carregar() {
+      try {
+        let url = '/matricula/'   
+        let todos = []
+        while (url) {
+          const { data } = await api.get(url)
+          todos = [...todos, ...data.results]
+          url = data.next ? data.next.replace(/^https?:\/\/[^/]+/, '') : null
+        }
+        setAlunos(todos.map((m) => ({
+          id: m.id,
+          ra: m.aluno,
+          nome: m.aluno_nome ?? '-',
+          email: m.aluno_email ?? '-',
+          status: m.aprovado ? 'Aprovado' : 'Reprovado',
+          anoAprovacao: m.semestre_referencia ?? '',
+          curso: m.curso_nome ?? '-',
+          percentualCurso: m.percentual_curso ?? 0,
+        })))
+      } catch (err) {
+        console.error(err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    carregar()
+  }, [])
 
-        const alunosFiltrados = alunos.filter((aluno) =>
-            aluno.nome.toLowerCase().includes(busca.toLowerCase())
-        )
+  const alunosFiltrados = alunos.filter((aluno) =>
+      aluno.nome.toLowerCase().includes(busca.toLowerCase())
+  )
 
     // 👇 Aplica a ordenação sobre os alunos já filtrados pela busca
   const alunosOrdenados = [...alunosFiltrados].sort((a, b) => {
-  const { campo, direcao } = ordenacao
-  const valorA = a[campo]
-  const valorB = b[campo]
-
-  // Compara strings (nome, status, curso, etc.) ignorando maiúsculas/minúsculas
-  if (typeof valorA === 'string') {
-    return direcao === 'asc'
-      ? valorA.localeCompare(valorB)
-      : valorB.localeCompare(valorA)
-  }
-
-  // Compara números (ra, percentualCurso, etc.)
-  return direcao === 'asc' ? valorA - valorB : valorB - valorA
-})
+    const { campo, direcao } = ordenacao
+    const valorA = a[campo]
+    const valorB = b[campo]
+    if (typeof valorA === 'string') {
+      return direcao === 'asc' ? valorA.localeCompare(valorB) : valorB.localeCompare(valorA)
+    }
+    return direcao === 'asc' ? valorA - valorB : valorB - valorA
+  })
 
 function handleBusca(event) {
     const valor = event.target.value;
@@ -153,7 +130,10 @@ function handleBusca(event) {
     )
   }
 
-    if (loading) return <div className="p-5 text-sm text-gray-500">Carregando...</div>
+  const alunosCom50 = alunos.filter((a) => a.percentualCurso >= 50).length
+  const alunosCom75 = alunos.filter((a) => a.percentualCurso >= 75).length
+
+  if (loading) return <div className="p-5 text-sm text-gray-500">Carregando...</div>
 
   return (
     <div className="w-full bg-white rounded-lg shadow-[0px_4px_4px_0px_rgba(69,75,87,0.12)] overflow-hidden ">
@@ -162,13 +142,11 @@ function handleBusca(event) {
         <div className="flex flex-row gap-2 mb-1">
           <StatCard
             title="Alunos com 50% do curso"
-            value="259"
-            subvalue="902"
+            value={alunosCom50}
           />
           <StatCard
             title="Alunos com 75% do curso"
-            value="4%"
-            subvalue="10"
+            value={alunosCom75}
           />
           <div className="min-w-64 min-h-48 bg-white rounded-2xl p-1 flex flex-col items-center gap-2 shadow-md">
             <h3 className="text-[var(--text-dark)] text-[20px] text-center font-semibold">Filtro de Curso</h3>
@@ -184,7 +162,7 @@ function handleBusca(event) {
         <input 
             type="checkbox" 
             className="size-4 rounded-sm border border-neutral-300" 
-            checked={selecionados.length === alunos.length && alunos.length > 0}
+            checked={selecionados.length === alunosOrdenados.length && alunosOrdenados.length > 0}
             onChange={toggleTodos} />
 
         <div className="w-9 text-xs font-semibold text-gray-900 uppercase tracking-wide">RA</div>

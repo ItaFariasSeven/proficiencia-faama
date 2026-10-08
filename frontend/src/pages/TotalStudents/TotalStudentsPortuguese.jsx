@@ -1,7 +1,10 @@
+// Todos os alunos - Português
 import { useState, useEffect } from 'react'
 import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useSearchParams } from "react-router-dom";
 import SearchBar from '../../components/Searchbar/SearchBar';
+import HistoricoProvasCard from '../../components/HistoricoProvasCard/HistoricoProvasCard'
+import api from '../../services/api'
 
 
 // 👇 Mapeia o status pra cor do badge (evita repetir lógica de cor em cada linha)
@@ -10,52 +13,19 @@ const STATUS_STYLES = {
   Reprovado: 'bg-red-50 text-rose-600',
 }
 
-const alunosMock = [
-  {
-    id: 1,
-    ra: 1,
-    nome: 'Ann Culhane',
-    email: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla...',
-    status: 'Aprovado',
-    anoRealizacaoProva: '2024.1',
-    nota: 8.5,
-    curso: 'ADS',
-    percentualCurso: 50,
-  },
-  {
-    id: 2,
-    ra: 2,
-    nome: 'Ahmad Rosser',
-    email: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla...',
-    status: 'Reprovado',
-    anoRealizacaoProva: '2024.2',
-    nota: 8.5,
-    curso: 'ADS',
-    percentualCurso: 50,
-},
-{
-    id: 3,
-    ra: 3,
-    nome: 'Zain Calzoni',
-    email: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla...',
-    status: 'Reprovado',
-    anoRealizacaoProva: '',
-    nota: 8.5,
-    curso: 'ADS',
-    percentualCurso: 50,
-},
-{
-    id: 4,
-    ra: 4,
-    nome: 'Omar Levin',
-    email: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla...',
-    status: 'Aprovado',
-    anoRealizacaoProva: '2024.2',
-    nota: 8.5,
-    curso: 'ADS',
-    percentualCurso: 75,
-  },
-]
+const DISCIPLINA = 'PORTUGUES'
+
+// 👇 Busca todas as páginas de um endpoint paginado do DRF
+async function buscarTodos(urlInicial) {
+  let url = urlInicial
+  let todos = []
+  while (url) {
+    const { data } = await api.get(url)
+    todos = [...todos, ...data.results]
+    url = data.next ? data.next.replace(/^https?:\/\/[^/]+/, '') : null
+  }
+  return todos
+}
 
 export default function TotalStudentsPortuguese() {
     const [alunos, setAlunos] = useState([])
@@ -64,25 +34,58 @@ export default function TotalStudentsPortuguese() {
     const [ordenacao, setOrdenacao] = useState({ campo: 'ra', direcao: 'asc' })
     const [loading, setLoading] = useState(true)
 
-    const ITENS_POR_PAGINA = 6000
-
     const [searchParams, setSearchParams] = useSearchParams()
     const busca = searchParams.get('busca') ?? ''
 
     useEffect(() => {
-      setAlunos(alunosMock)
-      setLoading(false)
+      carregarAlunos()
     }, [])
 
-        const alunosFiltrados = alunos.filter((aluno) =>
-            aluno.nome.toLowerCase().includes(busca.toLowerCase())
-        )
+    async function carregarAlunos() {
+    try {
+      const [todosAlunos, todasProvas] = await Promise.all([
+        buscarTodos('/alunos/'),
+        buscarTodos(`/proficiencia/historico/?disciplina=${DISCIPLINA}`),
+      ])
+
+      const ultimaProvaPorAluno = {}
+      todasProvas.forEach((prova) => {
+        const atual = ultimaProvaPorAluno[prova.aluno]
+        if (!atual || prova.semestre_prova > atual.semestre_prova) {
+          ultimaProvaPorAluno[prova.aluno] = prova
+        }
+      })
+
+      setAlunos(todosAlunos.map((a) => {
+        const prova = ultimaProvaPorAluno[a.id]
+        return {
+          id: a.id,
+          ra: a.id,
+          nome: a.nome,
+          email: a.email,
+          status: prova ? prova.status : '-',
+          anoRealizacaoProva: prova ? prova.semestre_prova : '',
+          nota: prova ? prova.nota : '-',
+          curso: '-',
+          percentualCurso: 0,
+        }
+      }))
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+    const alunosFiltrados = alunos.filter((aluno) =>
+        aluno.nome.toLowerCase().includes(busca.toLowerCase())
+    )
 
     // 👇 Aplica a ordenação sobre os alunos já filtrados pela busca
   const alunosOrdenados = [...alunosFiltrados].sort((a, b) => {
-  const { campo, direcao } = ordenacao
-  const valorA = a[campo]
-  const valorB = b[campo]
+    const { campo, direcao } = ordenacao
+    const valorA = a[campo]
+    const valorB = b[campo]
 
   // Compara strings (nome, status, curso, etc.) ignorando maiúsculas/minúsculas
   if (typeof valorA === 'string') {
@@ -144,7 +147,7 @@ function handleBusca(event) {
     )
   }
 
-    if (loading) return <div className="p-5 text-sm text-gray-500">Carregando...</div>
+  if (loading) return <div className="p-5 text-sm text-gray-500">Carregando...</div>
 
   return (
     <div className="w-full bg-white rounded-lg shadow-[0px_4px_4px_0px_rgba(69,75,87,0.12)] overflow-hidden">
@@ -244,6 +247,11 @@ function handleBusca(event) {
           <div className="w-28 text-right text-sm text-[var(--text-dark)]">{aluno.curso}</div>
 
           <div className="w-24 text-right text-sm text-[var(--text-dark)]">{aluno.percentualCurso}%</div>
+
+          {/* Histórico de provas de Português por semestre */}
+          <div className="px-5 pb-3 bg-white">
+            <HistoricoProvasCard alunoId={aluno.id} alunoNome={aluno.nome} disciplinaFiltro={DISCIPLINA} />
+          </div>
         </div>
       ))}
 

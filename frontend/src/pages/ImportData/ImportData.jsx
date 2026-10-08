@@ -1,5 +1,7 @@
+// Importar dados
 import UploadArea from '../../components/UploadArea/UploadArea'
 import { useState, useEffect } from 'react'
+import api from '../../services/api'
 import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
 
 const STATUS_STYLES = {
@@ -7,62 +9,36 @@ const STATUS_STYLES = {
   Reprovado: 'bg-red-50 text-rose-600',
 }
 
-const alunosMock = [
-  {
-    id: 1,
-    ra: 1,
-    nome: 'Ann Culhane',
-    email: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla...',
-    status: 'Aprovado',
-    anoRealizacaoProva: '2024.1',
-    notaMatematica: 8.5,
-    notaPortugues: 7.0,
-    curso: 'ADS',
-    percentualCurso: 50,
-  },
-  {
-    id: 2,
-    ra: 2,
-    nome: 'Ahmad Rosser',
-    email: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla...',
-    status: 'Reprovado',
-    anoRealizacaoProva: '2024.2',
-    notaMatematica: 8.5,
-    notaPortugues: 7.0,
-    curso: 'ADS',
-    percentualCurso: 50,
-},
-{
-    id: 3,
-    ra: 3,
-    nome: 'Zain Calzoni',
-    email: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla...',
-    status: 'Reprovado',
-    anoRealizacaoProva: '',
-    notaMatematica: 8.5,
-    notaPortugues: 7.0,
-    curso: 'ADS',
-    percentualCurso: 50,
-},
-{
-    id: 4,
-    ra: 4,
-    nome: 'Omar Levin',
-    email: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla...',
-    status: 'Aprovado',
-    anoRealizacaoProva: '2024.2',
-    notaMatematica: 8.5,
-    notaPortugues: 7.0,
-    curso: 'ADS',
-    percentualCurso: 75,
-  },
-]
-
 export default function ImportData() {
 
-  function handleArquivo(file) {
-    console.log('Arquivo selecionado:', file)
-    // lógica de upload/parse do CSV aqui
+  const [disciplina, setDisciplina] = useState('MATEMATICA')
+  const [semestre, setSemestre] = useState('2026.1')
+  const [resultado, setResultado] = useState(null)
+  const [enviando, setEnviando] = useState(false)
+  const [erro, setErro] = useState('')
+
+  async function handleArquivo(file) {
+    // lógica de upload/parse do xlsx aqui
+    setEnviando(true)
+    setErro('')
+    setResultado(null)
+    try {
+      const formData = new FormData()
+      formData.append('arquivo', file)
+      formData.append('disciplina', disciplina)
+      formData.append('semestre', semestre)
+
+      const { data } = await api.post(
+        '/proficiencia/upload-planilha-moodle/',
+        formData,
+        { headers: { 'Content-Type': 'multipart/form-data' } }
+      )
+      setResultado(data)
+    } catch (err) {
+      setErro(err.response?.data?.detail || 'Erro ao enviar o arquivo.')
+    } finally {
+      setEnviando(false)
+    }
   }
 
   const [alunos, setAlunos] = useState([])
@@ -76,7 +52,7 @@ export default function ImportData() {
   
 
     useEffect(() => {
-      setAlunos(alunosMock)
+      setAlunos([])
       setLoading(false)
     }, [])
 
@@ -107,8 +83,31 @@ export default function ImportData() {
   return (
     <div>
       <div className="w-full p-6">
-        <UploadArea onArquivoSelecionado={handleArquivo} />
+        {/* <div className="flex">
+          <select value={disciplina} onChange={(e) => setDisciplina(e.target.value)} className='border rounded px-3 py-2'>
+            <option value="MATEMATICA">Matemática</option>
+            <option value="PORTUGUES">Português</option>
+          </select>
+          <input 
+            type='text'
+            value={semestre}
+            onChange={(e) => setSemestre(e.target.value)}
+            placeholder='Ex: 2026.1'
+            className='border rounded px-3 py-2'
+          />
+        </div> */}
+
+          <UploadArea onArquivoSelecionado={handleArquivo} />
+
+          {enviando && <p className='text-sm text-gray-500'>Enviando...</p>}
+          {erro && <p className='text-sm text-red-500'>{erro}</p>}
+          {resultado && (
+            <p className='text-sm text-green-600'>
+              {resultado.novos} novos registros, {resultado.atualizados} atualizados, {resultado.erros.length} erros.
+            </p>
+          )}
       </div>
+      
       <div className="w-full bg-white rounded-lg shadow-[0px_4px_4px_0px_rgba(69,75,87,0.12)] overflow-hidden">
       {/* Cabeçalho da tabela */}
       <div className="flex items-center gap-2 px-5 py-2 bg-slate-50/75 border-b border-slate-200">

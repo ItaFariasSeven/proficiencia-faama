@@ -1,7 +1,10 @@
+// Todos os alunos - Matemática
 import { useState, useEffect } from 'react'
 import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useSearchParams } from "react-router-dom";
 import SearchBar from '../../components/Searchbar/SearchBar';
+import HistoricoProvasCard from '../../components/HistoricoProvasCard/HistoricoProvasCard'
+import api from '../../services/api'
 
 
 // 👇 Mapeia o status pra cor do badge (evita repetir lógica de cor em cada linha)
@@ -10,52 +13,21 @@ const STATUS_STYLES = {
   Reprovado: 'bg-red-50 text-rose-600',
 }
 
-const alunosMock = [
-  {
-    id: 1,
-    ra: 1,
-    nome: 'Ann Culhane',
-    email: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla...',
-    status: 'Aprovado',
-    anoRealizacaoProva: '2024.1',
-    nota: 8.5,
-    curso: 'ADS',
-    percentualCurso: 50,
-  },
-  {
-    id: 2,
-    ra: 2,
-    nome: 'Ahmad Rosser',
-    email: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla...',
-    status: 'Reprovado',
-    anoRealizacaoProva: '2024.2',
-    nota: 8.5,
-    curso: 'ADS',
-    percentualCurso: 50,
-},
-{
-    id: 3,
-    ra: 3,
-    nome: 'Zain Calzoni',
-    email: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla...',
-    status: 'Reprovado',
-    anoRealizacaoProva: '',
-    nota: 8.5,
-    curso: 'ADS',
-    percentualCurso: 50,
-},
-{
-    id: 4,
-    ra: 4,
-    nome: 'Omar Levin',
-    email: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla...',
-    status: 'Aprovado',
-    anoRealizacaoProva: '2024.2',
-    nota: 8.5,
-    curso: 'ADS',
-    percentualCurso: 75,
-  },
-]
+const DISCIPLINA = 'MATEMATICA'
+
+
+
+// 👇 Busca todas as páginas de um endpoint paginado do DRF
+async function buscarTodos(urlInicial) {
+  let url = urlInicial
+  let todos = []
+  while (url) {
+    const { data } = await api.get(url)
+    todos = [...todos, ...data.results]
+    url = data.next ? data.next.replace(/^https?:\/\/[^/]+/, '') : null
+  }
+  return todos
+}
 
 export default function TotalStudentsMath() {
     const [alunos, setAlunos] = useState([])
@@ -64,15 +36,52 @@ export default function TotalStudentsMath() {
     const [ordenacao, setOrdenacao] = useState({ campo: 'ra', direcao: 'asc' })
     const [loading, setLoading] = useState(true)
 
-    const ITENS_POR_PAGINA = 6000
-
     const [searchParams, setSearchParams] = useSearchParams()
     const busca = searchParams.get('busca') ?? ''
 
     useEffect(() => {
-      setAlunos(alunosMock)
-      setLoading(false)
+      carregarAlunos()
     }, [])
+
+    async function carregarAlunos() {
+      try {
+        const [todosAlunos, todasProvas] = await Promise.all([
+          buscarTodos('/alunos/'),
+          buscarTodos(`/proficiencia/historico/?disciplina=${DISCIPLINA}`),
+        ])
+      
+        // 👇 Mapa rápido de id -> dados do aluno
+        const alunoPorId = {}
+        todosAlunos.forEach((a) => { alunoPorId[a.id] = a })
+      
+        // 👇 Uma LINHA por prova (não resume mais pra "última"), ordenado por semestre
+        const linhas = todasProvas
+          .map((prova) => {
+            const aluno = alunoPorId[prova.aluno]
+            if (!aluno) return null
+            return {
+              // id único por linha = aluno + semestre, pra não repetir key no map
+              linhaId: `${prova.aluno}-${prova.semestre_prova}`,
+              ra: aluno.id,
+              nome: aluno.nome,
+              email: aluno.email,
+              status: prova.status,
+              anoRealizacaoProva: prova.semestre_prova,
+              nota: prova.nota,
+              curso: '-',
+              percentualCurso: 0,
+            }
+          })
+          .filter(Boolean)
+          .sort((a, b) => a.nome.localeCompare(b.nome) || a.anoRealizacaoProva.localeCompare(b.anoRealizacaoProva))
+        
+        setAlunos(linhas)
+      } catch (err) {
+        console.error(err)
+      } finally {
+        setLoading(false)
+      }
+    }
 
     const alunosFiltrados = alunos.filter((aluno) =>
         aluno.nome.toLowerCase().includes(busca.toLowerCase())
@@ -208,15 +217,16 @@ export default function TotalStudentsMath() {
       {/* Linhas */}
       {alunosOrdenados.map((aluno, index) => (
         <div
-          key={aluno.id}
+          key={aluno.linhaIdid}
           className={`flex items-center gap-5 px-5 py-1 h-16 ${
             index % 2 === 1 ? 'bg-gray-50' : 'bg-white'
           }`}
         >
+
           <input 
             type="checkbox" 
-            checked={selecionados.includes(aluno.id)}
-            onChange={() => toggleSelecionado(aluno.id)}
+            checked={selecionados.includes(aluno.linhaIdid)}
+            onChange={() => toggleSelecionado(aluno.linhaIdid)}
             className="size-4 rounded-sm border border-neutral-300" />
 
           <div className="w-9 text-sm font-medium text-[var(--text-dark)]">{aluno.ra}</div>

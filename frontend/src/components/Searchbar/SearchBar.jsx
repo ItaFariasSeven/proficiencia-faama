@@ -37,7 +37,7 @@ export default function SearchBar({ busca, onBusca }) {
       </SearchIconWrapper>
       <StyledInputBase
         type='text'
-        placeholder="Pesquisar…"
+        placeholder="Pesquisar..."
         value={busca}
         onChange={onBusca}
         inputProps={{ 'aria-label': 'search' }}

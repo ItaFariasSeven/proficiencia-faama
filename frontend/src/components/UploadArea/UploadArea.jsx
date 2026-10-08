@@ -8,8 +8,8 @@ export default function UploadArea({ onArquivoSelecionado }) {
 
   function validarESetar(file) {
     if (!file) return
-    if (!file.name.toLowerCase().endsWith('.csv')) {
-      alert('Somente arquivos no formato .CSV são aceitos.')
+    if (!file.name.toLowerCase().endsWith('.xlsx')) {
+      alert('Somente arquivos no formato .XLSX são aceitos.')
       return
     }
     setArquivo(file)
@@ -57,14 +57,14 @@ export default function UploadArea({ onArquivoSelecionado }) {
         </p>
 
         {!arquivo && (
-          <p className="text-sm text-gray-400 text-center">Somente arquivo no formato .CSV</p>
+          <p className="text-sm text-gray-400 text-center">Somente arquivo no formato .xlsx</p>
         )}
 
         <input
           ref={inputRef}
           id="upload-csv"
           type="file"
-          accept=".csv"
+          accept=".xlsx"
           onChange={handleSelecionarArquivo}
           className="hidden"
         />

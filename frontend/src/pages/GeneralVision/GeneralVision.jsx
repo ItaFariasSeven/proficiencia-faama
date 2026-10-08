@@ -1,4 +1,7 @@
+// Visão Geral
 import HistoricoChart from "../../components/Grafics/GraficLine"
+import { useState, useEffect } from 'react'
+import api from '../../services/api'
 
 function StatCard({ title, value, subvalue, children }) {
   return (
@@ -27,6 +30,31 @@ function RankingItem({ course, percentage }) {
 
 export default function GeneralVision() {
 
+  const [totalAlunos, setTotalAlunos] = useState(0)
+  const [totalAprovados, setTotalAprovados] = useState(0)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    async function carregar() {
+      try {
+        let url = '/alunos/'
+        let todos = []
+        while (url) {
+          const { data } = await api.get(url)
+          todos = [...todos, ...data.results]
+          url = data.next ? data.next.replace(/^https?:\/\/[^/]+/, '') : null
+        }
+        setTotalAlunos(todos.length)
+        setTotalAprovados(todos.filter((a) => a.aprovado_geral).length)
+      } catch (err) {
+        console.error(err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    carregar()
+  }, [])
+
   const ranking = [
     { course: 'ADS', percentage: 42 },
     { course: 'Pedagogia', percentage: 38 },
@@ -36,6 +64,11 @@ export default function GeneralVision() {
     { course: 'Psicologia', percentage: 34 },
   ]
 
+  const percentualAprovados = totalAlunos > 0
+    ? ((totalAprovados / totalAlunos) * 100).toFixed(1)
+    : 0
+
+  if (loading) return <div className="p-5 text-sm text-gray-500">Carregando...</div>
   
 
   return (
@@ -46,13 +79,13 @@ export default function GeneralVision() {
         <div className="flex flex-row gap-2 mb-1">
           <StatCard
             title="Total de alunos que fizeram a prova"
-            value="259"
-            subvalue="902"
+            value={totalAlunos}
+            subvalue={subvalue}
           />
           <StatCard
             title="Aprovados"
-            value="4%"
-            subvalue="10"
+            value={`${percentualAprovados}%`}
+            subvalue={totalAprovados}
           />
           <div className="min-w-64 min-h-48 bg-white rounded-2xl p-1 flex flex-col items-center gap-2 shadow-md">
             <h3 className="text-[var(--text-dark)] text-[20px] text-center font-semibold">Filtro de Período</h3>
