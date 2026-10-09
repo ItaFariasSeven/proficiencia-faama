@@ -64,7 +64,7 @@ export default function NavBar() {
     }
     
     return(
-        <aside className=" h-screen bg-[var(--background-login)] flex flex-col items-start pt-16 px-4 gap-12">
+        <aside className=" h-full bg-[var(--background-login)] flex flex-col items-start pt-16 px-4 gap-12">
         
             {/* Título */}
             <h1 style={{ fontFamily: 'Kavoon' }} className="w-full text-center text-4xl text-[var(--text-light)]">

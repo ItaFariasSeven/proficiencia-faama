@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
-import { ChevronDown, ChevronLeft, ChevronRight, Pencil, Check, X } from 'lucide-react'
+import { ChevronDown, ChevronLeft, ChevronRight, Pencil, Check, X, Filter } from 'lucide-react'
 import ButtonExport from '../../components/Buttons/Buttonexport'
 import HistoricoProvasCard from '../../components/HistoricoProvasCard/HistoricoProvasCard';
 import './GeneralTableModule.css'
 import SearchBar from '../../components/SearchBar/SearchBar';
+import FilterSelect from '../../components/Filter/FilterSelect';
 
 import api from '../../services/api'
 
@@ -35,8 +36,9 @@ function RelatorioDataProvider({ render }) {
   const [alunos, setAlunos] = useState([])
   const [selecionados, setSelecionados] = useState([])
   const [pagina, setPagina] = useState(1)
-  const [totalPaginas, setTotalPaginas] = useState(1) // Novo estado para total de páginas
+  const [totalPaginas, setTotalPaginas] = useState(1) 
   const [busca, setBusca] = useState('')
+  const [filtros, setFiltros] = useState({ periodo: '', curso: '', status: '' })
   const [ordenacao, setOrdenacao] = useState({ campo: 'ra', direcao: 'asc' })
   const [loading, setLoading] = useState(true)
 
@@ -51,13 +53,19 @@ function RelatorioDataProvider({ render }) {
   // Executa o carregamento sempre que a página ou o termo de busca mudarem
   useEffect(() => {
     carregarAlunos()    
-  }, [pagina, busca])
+  }, [pagina, busca, filtros])
 
   async function carregarAlunos() {
     setLoading(true)
     try {
+      let urlParams = `?page=${pagina}`;
+      if (busca) urlParams += `&search=${busca}`;
+      if (filtros.status) urlParams += `&status=${filtros.status.toLowerCase()}`;
+      if (filtros.curso) urlParams += `&curso=${filtros.curso}`;
+      if (filtros.periodo) urlParams += `&ano_realizacao=${filtros.periodo}`;
+
       // 1 e 2. Paginação e Busca no Servidor
-      const endpointAlunos = `/alunos/?page=${pagina}${busca ? `&search=${busca}` : ''}`;
+      const endpointAlunos = `/alunos/${urlParams}`;
       
       const [respostaAlunos, todasMatriculas, todosCursos] = await Promise.all([
         api.get(endpointAlunos), // Busca apenas 20 registros filtrados
@@ -205,6 +213,7 @@ function RelatorioDataProvider({ render }) {
       valoresEdicao,
       salvando,
       busca,
+      filtros,
     },
     actions: {
       setPagina,
@@ -214,6 +223,7 @@ function RelatorioDataProvider({ render }) {
       salvarEdicao,
       setBusca,
       carregarAlunos,
+      setFiltros,
     }
   })
 }
@@ -222,21 +232,35 @@ export default function GeneralTable() {
   return (
     <RelatorioDataProvider 
       render={({ state, actions }) => {
-        const { alunos, loading, pagina, totalPaginas, editandoId, valoresEdicao, salvando, busca } = state;
-        const { setPagina, iniciarEdicao, cancelarEdicao, salvarEdicao, setBusca, setValoresEdicao, carregarAlunos } = actions;
+        const { alunos, loading, pagina, totalPaginas, editandoId, valoresEdicao, salvando, busca, filtros } = state;
+        const { setPagina, iniciarEdicao, cancelarEdicao, salvarEdicao, setBusca, setValoresEdicao, carregarAlunos, setFiltros } = actions;
 
         return (
           // 3. Contêiner raiz para prevenir vazamento de layout: max-w-full com grid isolado.
           <div className="w-full max-w-full grid grid-cols-1 overflow-hidden">
             <div className="w-full bg-white rounded-lg shadow-[0px_4px_4px_0px_rgba(69,75,87,0.12)] flex flex-col min-w-0">
               
-              <SearchBar 
-                busca={busca} 
-                onBusca={(e) => {
-                  setBusca(e.target.value);
-                  setPagina(1);
-                }} 
-              />
+              <div className='grid grid-cols-2 text-end items-center'>
+                <div>
+                  <SearchBar 
+                    busca={busca} 
+                    onBusca={(e) => {
+                      setBusca(e.target.value);
+                      setPagina(1);
+                    }} 
+                    />
+                </div>
+
+                <div className="pr-4">
+                  <FilterSelect 
+                    filtros={filtros}
+                    onAplicarFiltros={(novosFiltros) => {
+                      setFiltros(novosFiltros);
+                      setPagina(1);
+                    }}
+                  />
+                </div>
+              </div>
               
               <div className="w-full overflow-x-auto relative">
                 <div className="min-w-[1050px] w-full">

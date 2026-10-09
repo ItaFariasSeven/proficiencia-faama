@@ -11,7 +11,7 @@ const Search = styled('div')(({ theme }) => ({
   display: 'flex',
   alignItems: 'center',
   margin: '12px 20px',
-  width: '30%',
+  width: '80%',
 }))
 
 const SearchIconWrapper = styled('div')(({ theme }) => ({
@@ -37,7 +37,7 @@ export default function SearchBar({ busca, onBusca }) {
       </SearchIconWrapper>
       <StyledInputBase
         type='text'
-        placeholder="Pesquisaro..."
+        placeholder="Pesquisar..."
         value={busca}
         onChange={onBusca}
         inputProps={{ 'aria-label': 'search' }}
