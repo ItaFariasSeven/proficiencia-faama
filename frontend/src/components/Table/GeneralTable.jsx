@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react'
 import { ChevronDown, ChevronLeft, ChevronRight, Pencil, Check, X, Filter } from 'lucide-react'
 import ButtonExport from '../../components/Buttons/Buttonexport'
 import HistoricoProvasCard from '../../components/HistoricoProvasCard/HistoricoProvasCard';
-import './GeneralTableModule.css'
 import SearchBar from '../../components/SearchBar/SearchBar';
 import FilterSelect from '../../components/Filter/FilterSelect';
 
