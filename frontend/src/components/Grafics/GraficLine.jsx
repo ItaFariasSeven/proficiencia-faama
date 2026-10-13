@@ -8,6 +8,7 @@ import {
   Title,
   Tooltip,
   Legend,
+  Filler
 } from 'chart.js'
 
 // Registra tudo que vamos usar — SEM ISSO O GRÁFICO NÃO RENDERIZA
@@ -18,20 +19,29 @@ ChartJS.register(
   LineElement,
   Title,
   Tooltip,
-  Legend
+  Legend,
+  Filler
 )
 
 
-export default function HistoricoChart() {
-  const data = {
-    labels: [
-      '2016.1', '2016.2', '2017.1', '2017.2', '2018.1', '2018.2',
-      '2019.1',  
-    ],
+export default function HistoricoChart({ data = [] }) {
+  // Extrai apenas os nomes dos semestres para o Eixo X
+  const labelsEixoX = data.map(item => item.name);
+
+  // Calcula a porcentagem de aprovação para cada semestre para o Eixo Y
+  const valoresEixoY = data.map(item => {
+    if (item.totalProvas === 0) return 0;
+    // Calcula: (20 aprovados / 45 total) * 100 = 44%
+    return Math.round((item.provasAprovadas / item.totalProvas) * 100);
+  });
+
+  // Monta o objeto no formato exato que o Chart.js exige
+  const chartData = {
+    labels: labelsEixoX,
     datasets: [
       {
         label: 'Taxa de aprovação',
-        data: [30, 40, 50, 60, 40, 62, 58, 65, ],
+        data: valoresEixoY,
         borderColor: 'rgb(34, 197, 94)',        // verde (linha)
         backgroundColor: 'rgba(34, 197, 94, 0.2)', // verde clarinho (área embaixo)
         tension: 0.3,   // deixa a linha "curvada" em vez de reta pontuda
@@ -42,7 +52,7 @@ export default function HistoricoChart() {
 
   const options = {
     responsive: true,
-    maintainAspectRatio: false, // permite controlar altura via CSS
+    maintainAspectRatio: false, 
     plugins: {
       legend: {
         position: 'top',
@@ -62,9 +72,18 @@ export default function HistoricoChart() {
     },
   }
 
+  // Se não houver dados, mostra um aviso
+  if (data.length === 0) {
+    return (
+      <div className="flex items-center justify-center w-full h-[255px] text-gray-400 text-sm font-medium">
+        Não há dados suficientes para gerar o histórico.
+      </div>
+    );
+  }
+
   return (
     <div style={{ width: '100%', height: '255px' }}>
-      <Line data={data} options={options} />
+      <Line data={chartData} options={options} />
     </div>
   )
 }
