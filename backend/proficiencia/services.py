@@ -71,13 +71,15 @@ def importar_planilha_padrao(arquivo):
 
             # 3. Resolve a Matrícula
             semestre_ref = str(row.get('SEMESTRE_REFERENCIA', '')).strip()
+            if not semestre_ref or semestre_ref.lower() == 'nan':
+                continue
             turno = str(row.get('TURNO', 'MANHA')).strip().upper()
             periodo = row.get('PERIODO_CURSO')
             
             # Se periodo for vazio no excel, joga 1 como padrão
             if pd.isna(periodo): 
                 periodo = 1 
-            periodo = int(periodo)
+            periodo = int(float(periodo))
 
             matricula = None
             if semestre_ref and semestre_ref.lower() != 'nan':
@@ -100,35 +102,37 @@ def importar_planilha_padrao(arquivo):
                 )
 
             # Salva Notas (Ignora se a célula no Excel estiver vazia)
-            nota_mat = row.get('NOTA_MATEMATICA')
-            if pd.notna(nota_mat) and str(nota_mat).strip() != '':
-                HistoricoProva.objects.update_or_create(
-                    aluno=aluno,
-                    disciplina="MATEMATICA",
-                    semestre_prova=semestre_ref,
-                    defaults={
-                        'nota': float(nota_mat),
-                        'matricula': matricula,
-                        'origem_dados': 'PLANILHA',
-                        'importacao': importacao
-                    }
-                )
-                provas_importadas += 1
+            nota_mat = str(row.get('NOTA_MATEMATICA', '')).strip().replace(',', '.')
+            if nota_mat and nota_mat.lower() != 'nan':
+                if pd.notna(nota_mat) and str(nota_mat).strip() != '':
+                    HistoricoProva.objects.update_or_create(
+                        aluno=aluno,
+                        disciplina="MATEMATICA",
+                        semestre_prova=semestre_ref,
+                        defaults={
+                            'nota': float(nota_mat),
+                            'matricula': matricula,
+                            'origem_dados': 'PLANILHA',
+                            'importacao': importacao
+                        }
+                    )
+                    provas_importadas += 1
 
-            nota_port = row.get('NOTA_PORTUGUES')
-            if pd.notna(nota_port) and str(nota_port).strip() != '':
-                HistoricoProva.objects.update_or_create(
-                    aluno=aluno,
-                    disciplina="PORTUGUES",
-                    semestre_prova=semestre_ref,
-                    defaults={
-                        'nota': float(nota_port),
-                        'matricula': matricula,
-                        'origem_dados': 'PLANILHA',
-                        'importacao': importacao
-                    }
-                )
-                provas_importadas += 1
+            nota_port = str(row.get('NOTA_PORTUGUES', '')).strip().replace(',', '.')
+            if nota_port and nota_port.lower() != 'nan':
+                if pd.notna(nota_port) and str(nota_port).strip() != '':
+                    HistoricoProva.objects.update_or_create(
+                        aluno=aluno,
+                        disciplina="PORTUGUES",
+                        semestre_prova=semestre_ref,
+                        defaults={
+                            'nota': float(nota_port),
+                            'matricula': matricula,
+                            'origem_dados': 'PLANILHA',
+                            'importacao': importacao
+                        }
+                    )
+                    provas_importadas += 1
 
     return {
         "status": "sucesso",

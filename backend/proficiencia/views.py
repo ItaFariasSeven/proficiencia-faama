@@ -1,5 +1,6 @@
 from django.http import JsonResponse
 from django.shortcuts import render
+from alunos.models import Aluno
 from notificacoes.services import enviar_avisos_prova
 import pandas as pd
 from rest_framework import viewsets, filters, status
@@ -68,3 +69,27 @@ class UploadPlanilhaView(APIView):
         resumo = importar_planilha_padrao(serializer.validated_data["arquivo"])
         
         return Response(resumo, status=status.HTTP_200_OK)
+
+
+class AlunoListView(APIView):
+    def get(self, request):
+        # Aqui busca os alunos e formata os dados para o frontend
+        alunos = Aluno.objects.all().values(
+            'id', 'ra', 'nome', 'email', 'nota_matematica', 'nota_portugues', 'aprovado_geral'
+        )
+        
+        # Formatar a resposta para casar exatamente com o que o React espera
+        dados_formatados = []
+        for aluno in alunos:
+            dados_formatados.append({
+                "id": aluno["id"],
+                "ra": aluno["ra"],
+                "nome": aluno["nome"],
+                "email": aluno["email"],
+                "notaMatematica": aluno["nota_matematica"] or "-",
+                "notaPortugues": aluno["nota_portugues"] or "-",
+                "status": "Aprovado" if aluno["aprovado_geral"] else "Reprovado",
+                # Adicione os outros campos como 'curso' e 'percentualCurso' conforme sua lógica
+            })
+            
+        return Response(dados_formatados)
