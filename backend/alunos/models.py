@@ -7,7 +7,7 @@ class Aluno(models.Model):
     email = models.EmailField(unique=True, db_index=True)
 
     aprovado_geral = models.BooleanField(default=False)
-    data_aprovacao_geral = models.DateField(null=True, blank=True)
+    data_aprovacao_geral = models.CharField(max_length=10, null=True, blank=True, help_text="Ex: 2026.1")
 
     nota_matematica = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
     nota_portugues = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
