@@ -6,9 +6,7 @@ from alunos.models import Aluno
 # Create your models here.
 class ImportacaoPlanilha(models.Model):
     ORIGEM_CHOICES = [
-        ("MOODLE", "Moodle"),
-        ("TOTVS", "TOTVS"),
-        ("HISTORICO", "Planilha histórica (migração)"),
+        ("PADRAO", "Planilha Padrão Unificada"),
     ]
     origem = models.CharField(max_length=20, choices=ORIGEM_CHOICES)
     nome_arquivo = models.CharField(max_length=255)
@@ -28,9 +26,8 @@ class HistoricoProva(models.Model):
         ("MATEMATICA", "Matemática"),
     ]
     ORIGEM_DADOS_CHOICES = [
-        ("MOODLE", "Moodle"),
+        ("PLANILHA", "Importação via Planilha"),
         ("MANUAL", "Manual"),
-        ("HISTORICO_ANTIGO", "Histórico antigo (sem % calculado)"),
     ]
 
     aluno = models.ForeignKey(Aluno, on_delete=models.CASCADE, related_name="historico_provas")

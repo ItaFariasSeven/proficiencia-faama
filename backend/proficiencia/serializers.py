@@ -31,7 +31,5 @@ class HistoricoProvaSerializer(serializers.ModelSerializer):
 
 
 class UploadPlanilhaSerializer(serializers.Serializer):
-    """Serializer só para validar o payload do upload (não é um ModelSerializer)."""
+    """Serializer só para validar o payload do upload da Planilha Padrão."""
     arquivo = serializers.FileField()
-    disciplina = serializers.ChoiceField(choices=HistoricoProva.DISCIPLINA_CHOICES)
-    semestre = serializers.CharField(max_length=10)

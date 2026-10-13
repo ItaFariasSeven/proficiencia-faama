@@ -1,10 +1,11 @@
 # notificacoes/services.py
-
+import pandas as pd
 from decimal import Decimal
 from django.db import transaction
 from alunos.models import Aluno
+from cursos.models import Curso
 from .models import HistoricoProva, ImportacaoPlanilha
-from .parsers.moodle import ler_planilha_moodle
+from matricula.models import MatriculaSemestre
 
 
 
@@ -24,48 +25,117 @@ def buscar_ou_criar_aluno(nome: str, email: str):
     return aluno, foi_criado
 
 
-@transaction.atomic
-def importar_planilha_moodle(caminho_arquivo, disciplina, semestre_prova):
-    """
-    Processa a planilha do Moodle e cria/atualiza os registros.
+def importar_planilha_padrao(arquivo):
+    # Lê a aba principal do Excel
+    df = pd.read_excel(arquivo)
+    
+    # Remove espaços em branco dos nomes das colunas para evitar erros bobos
+    df.columns = df.columns.str.strip().str.upper()
 
-    @transaction.atomic garante que, se der erro no meio do processo,
-    NADA é salvo (evita importação "pela metade").
-    """
-    registro_importacao = ImportacaoPlanilha.objects.create(
-        origem="MOODLE",
-        nome_arquivo=caminho_arquivo.name,
-        semestre_referencia=semestre_prova,
+    # Cria o registro da importação
+    importacao = ImportacaoPlanilha.objects.create(
+        origem="PADRAO",
+        nome_arquivo=arquivo.name,
+        semestre_referencia="MULTIPLOS" # Como a planilha pode ter vários, deixamos genérico
     )
 
-    dados_alunos = ler_planilha_moodle(caminho_arquivo)
+    alunos_criados = 0
+    provas_importadas = 0
 
-    resumo = {"novos": 0, "atualizados": 0, "erros": []}
+    with transaction.atomic():
+        for index, row in df.iterrows():
+            email = str(row.get('EMAIL', '')).strip()
+            if not email or email.lower() == 'nan':
+                continue # Pula linhas sem e-mail
 
-    for dado in dados_alunos:
-        try:
-            aluno, foi_criado = buscar_ou_criar_aluno(
-                nome=dado["nome_completo"],
-                email=dado["email"],
+            nome = str(row.get('NOME', '')).strip()
+            ra = str(row.get('RA', '')).strip()
+            if ra.lower() == 'nan': ra = None
+
+            # 1. Busca ou Cria o Aluno
+            aluno, created = Aluno.objects.get_or_create(
+                email=email,
+                defaults={'nome': nome, 'ra': ra}
             )
+            if created:
+                alunos_criados += 1
 
-            HistoricoProva.objects.update_or_create(
-                aluno=aluno,
-                disciplina=disciplina,
-                semestre_prova=semestre_prova,
-                defaults={
-                    "nota": Decimal(str(dado["nota"])),
-                    "importacao": registro_importacao,
-                    "origem_dados": "MOODLE",
-                }
-            )
+            # 2. Busca ou Cria o Curso
+            nome_curso = str(row.get('CURSO', '')).strip()
+            curso = None
+            if nome_curso and nome_curso.lower() != 'nan':
+                curso, _ = Curso.objects.get_or_create(
+                    nome=nome_curso,
+                    defaults={'duracao_periodos': 8} # Valor padrão se for curso novo
+                )
 
-            resumo["novos" if foi_criado else "atualizados"] += 1
+            # 3. Resolve a Matrícula
+            semestre_ref = str(row.get('SEMESTRE_REFERENCIA', '')).strip()
+            turno = str(row.get('TURNO', 'MANHA')).strip().upper()
+            periodo = row.get('PERIODO_CURSO')
+            
+            # Se periodo for vazio no excel, joga 1 como padrão
+            if pd.isna(periodo): 
+                periodo = 1 
+            periodo = int(periodo)
 
-        except Exception as erro:
-            resumo["erros"].append({"aluno": dado["email"], "erro": str(erro)})
+            matricula = None
+            if semestre_ref and semestre_ref.lower() != 'nan':
+                
+                # Período que veio da planilha e divide pela duração oficial do curso no Banco de Dados
+                percentual_calculado = 0
+                if curso and curso.duracao_periodos:
+                    percentual_calculado = round((periodo / curso.duracao_periodos) * 100, 2)
+                
+                matricula, _ = MatriculaSemestre.objects.update_or_create(
+                    aluno=aluno,
+                    semestre_referencia=semestre_ref,
+                    defaults={
+                        'curso': curso,
+                        'turno': turno,
+                        'periodo_no_semestre': periodo,
+                        'percentual_curso': percentual_calculado,
+                        'importacao': importacao
+                    }
+                )
 
-    return resumo
+            # Salva Notas (Ignora se a célula no Excel estiver vazia)
+            nota_mat = row.get('NOTA_MATEMATICA')
+            if pd.notna(nota_mat) and str(nota_mat).strip() != '':
+                HistoricoProva.objects.update_or_create(
+                    aluno=aluno,
+                    disciplina="MATEMATICA",
+                    semestre_prova=semestre_ref,
+                    defaults={
+                        'nota': float(nota_mat),
+                        'matricula': matricula,
+                        'origem_dados': 'PLANILHA',
+                        'importacao': importacao
+                    }
+                )
+                provas_importadas += 1
+
+            nota_port = row.get('NOTA_PORTUGUES')
+            if pd.notna(nota_port) and str(nota_port).strip() != '':
+                HistoricoProva.objects.update_or_create(
+                    aluno=aluno,
+                    disciplina="PORTUGUES",
+                    semestre_prova=semestre_ref,
+                    defaults={
+                        'nota': float(nota_port),
+                        'matricula': matricula,
+                        'origem_dados': 'PLANILHA',
+                        'importacao': importacao
+                    }
+                )
+                provas_importadas += 1
+
+    return {
+        "status": "sucesso",
+        "alunos_novos": alunos_criados,
+        "provas_registradas": provas_importadas,
+        "arquivo": arquivo.name
+    }
 
 def enviar_avisos_prova(historico_prova):
     """

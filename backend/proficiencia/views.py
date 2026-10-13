@@ -9,7 +9,7 @@ from rest_framework.parsers import MultiPartParser, FormParser
 
 from .models import ImportacaoPlanilha, HistoricoProva
 from .serializers import (ImportacaoPlanilhaSerializer,HistoricoProvaSerializer,UploadPlanilhaSerializer,)
-from .services import importar_planilha_moodle
+from .services import importar_planilha_padrao
 
 
 # Create your views here.
@@ -53,10 +53,10 @@ class HistoricoProvaViewSet(viewsets.ModelViewSet):
         
 
 
-class UploadPlanilhaMoodleView(APIView):
+class UploadPlanilhaView(APIView):
     """
-    POST /proficiencia/upload-planilha-moodle/
-    multipart/form-data: arquivo, disciplina, semestre
+    POST /proficiencia/upload-planilha/
+    multipart/form-data: arquivo
     """
     parser_classes = [MultiPartParser, FormParser]
 
@@ -64,9 +64,7 @@ class UploadPlanilhaMoodleView(APIView):
         serializer = UploadPlanilhaSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        resumo = importar_planilha_moodle(
-            serializer.validated_data["arquivo"],
-            serializer.validated_data["disciplina"],
-            serializer.validated_data["semestre"],
-        )
+        # Agora passamos apenas o arquivo. O Python descobre o resto lendo as colunas.
+        resumo = importar_planilha_padrao(serializer.validated_data["arquivo"])
+        
         return Response(resumo, status=status.HTTP_200_OK)
