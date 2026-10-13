@@ -29,7 +29,7 @@ export default function ImportData() {
       formData.append('semestre', semestre)
 
       const { data } = await api.post(
-        '/proficiencia/upload-planilha-moodle/',
+        '/proficiencia/upload-planilha/',
         formData,
         { headers: { 'Content-Type': 'multipart/form-data' } }
       )
@@ -52,11 +52,21 @@ export default function ImportData() {
   
 
     useEffect(() => {
-      setAlunos([])
-      setLoading(false)
+      const fetchAlunos = async () => {
+        setLoading(true)
+        try {
+          const { data } = await api.get('/proficiencia/alunos/') 
+          setAlunos(data)
+        } catch (error) {
+          console.error("Falha ao buscar alunos", error)
+        } finally {
+          setLoading(false)
+        }
+      }
+      fetchAlunos()
     }, [])
 
-  // 👇 Alterna a ordenação ao clicar no cabeçalho
+  // Alterna a ordenação ao clicar no cabeçalho
   function handleOrdenar(campo) {
     setOrdenacao((prev) => ({
       campo,
@@ -103,7 +113,7 @@ export default function ImportData() {
           {erro && <p className='text-sm text-red-500'>{erro}</p>}
           {resultado && (
             <p className='text-sm text-green-600'>
-              {resultado.novos} novos registros, {resultado.atualizados} atualizados, {resultado.erros.length} erros.
+              {resultado.alunos_novos} novos alunos, {resultado.provas_registradas} provas registradas.
             </p>
           )}
       </div>
