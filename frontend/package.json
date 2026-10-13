@@ -25,7 +25,8 @@
     "react-router-dom": "^7.18.4",
     "styled-components": "^6.5.3",
     "tabler-icons-react": "^1.56.0",
-    "tailwindcss": "^4.3.3"
+    "tailwindcss": "^4.3.3",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/react": "^19.2.18",

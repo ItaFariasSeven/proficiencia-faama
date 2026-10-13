@@ -12,15 +12,6 @@ export default function GeneralReport() {
 
   return (
     <div className='text-end p-0'>
-      <div className='grid grid-cols-2'>
-        <div className='flex justify-start m-1'>
-          <ButtonAddUser />
-        </div>
-        <div className='flex justify-end m-1'>
-          <ButtonExport />
-        </div>
-      </div>
-
       <GeneralTable></GeneralTable>
     </div>
       

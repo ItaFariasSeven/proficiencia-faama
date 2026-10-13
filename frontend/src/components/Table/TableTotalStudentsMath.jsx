@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useSearchParams } from "react-router-dom";
 import SearchBar from '../../components/Searchbar/SearchBar';
+import FilterSelect from '../../components/Filter/FilterSelect';
 import api from '../../services/api'
 
 
@@ -32,7 +33,9 @@ export default function TableTotalStudentsMath() {
     const [alunos, setAlunos] = useState([])
     const [selecionados, setSelecionados] = useState([])
     const [pagina, setPagina] = useState(1)
+    const [totalPaginas, setTotalPaginas] = useState(1) 
     const [ordenacao, setOrdenacao] = useState({ campo: 'ra', direcao: 'asc' })
+    const [filtros, setFiltros] = useState({ periodo: '', curso: '', status: '' })
     const [loading, setLoading] = useState(true)
 
     const [searchParams, setSearchParams] = useSearchParams()
@@ -40,68 +43,59 @@ export default function TableTotalStudentsMath() {
 
     useEffect(() => {
       carregarAlunos()
-    }, [])
+    }, [pagina, busca, filtros])
 
     async function carregarAlunos() {
-      try {
-        const [todosAlunos, todasProvas] = await Promise.all([
-          buscarTodos('/alunos/'),
-          buscarTodos(`/proficiencia/historico/?disciplina=${DISCIPLINA}`),
-        ])
-      
-        // 👇 Mapa rápido de id -> dados do aluno
-        const alunoPorId = {}
-        todosAlunos.forEach((a) => { alunoPorId[a.id] = a })
-      
-        // 👇 Uma LINHA por prova (não resume mais pra "última"), ordenado por semestre
-        const linhas = todasProvas
-          .map((prova) => {
-            const aluno = alunoPorId[prova.aluno]
-            if (!aluno) return null
-            return {
-              // id único por linha = aluno + semestre, pra não repetir key no map
-              linhaId: `${prova.aluno}-${prova.semestre_prova}`,
-              ra: aluno.id,
-              nome: aluno.nome,
-              email: aluno.email,
-              status: prova.status,
-              anoRealizacaoProva: prova.semestre_prova,
-              nota: prova.nota,
-              curso: '-',
-              percentualCurso: 0,
-            }
-          })
-          .filter(Boolean)
-          .sort((a, b) => a.nome.localeCompare(b.nome) || a.anoRealizacaoProva.localeCompare(b.anoRealizacaoProva))
-        
-        setAlunos(linhas)
-      } catch (err) {
-        console.error(err)
-      } finally {
-        setLoading(false)
-      }
+    setLoading(true)
+    try {
+      // Monta a URL com a página atual e a busca
+      let urlParams = `?page=${pagina}`;
+      if (busca) urlParams += `&search=${busca}`;
+
+      // APLICAR OS FILTROS NA API
+      if (filtros.status) urlParams += `&status=${filtros.status.toLowerCase()}`;
+      if (filtros.curso) urlParams += `&curso=${filtros.curso}`;
+      if (filtros.periodo) urlParams += `&ano_realizacao=${filtros.periodo}`;
+
+      const { data } = await api.get(`/alunos/${urlParams}`)
+
+      // Calcula o total de páginas com base no "count" retornado pelo DRF
+      const totalRegistros = data.count || data.results?.length || 0;
+      setTotalPaginas(Math.ceil(totalRegistros / 20) || 1);
+
+      // Pega os 20 alunos desta página
+      const results = Array.isArray(data) ? data : (data.results || []);
+
+      setAlunos(results.map((a) => ({
+        id: a.id,
+        ra: a.id,
+        nome: a.nome,
+        email: a.email,
+        status: a.aprovado_geral ? 'Aprovado' : 'Reprovado',
+        anoAprovacao: a.data_aprovacao_geral ?? '',
+        curso: '-',
+        percentualCurso: 0,
+      })))
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setLoading(false)
     }
-
-    const alunosFiltrados = alunos.filter((aluno) =>
-        aluno.nome.toLowerCase().includes(busca.toLowerCase())
-    )
-
-    // 👇 Aplica a ordenação sobre os alunos já filtrados pela busca
-  const alunosOrdenados = [...alunosFiltrados].sort((a, b) => {
-  const { campo, direcao } = ordenacao
-  const valorA = a[campo]
-  const valorB = b[campo]
-
-  // Compara strings (nome, status, curso, etc.) ignorando maiúsculas/minúsculas
-  if (typeof valorA === 'string') {
-    return direcao === 'asc'
-      ? valorA.localeCompare(valorB)
-      : valorB.localeCompare(valorA)
   }
 
-  // Compara números (ra, percentualCurso, etc.)
-  return direcao === 'asc' ? valorA - valorB : valorB - valorA
-})
+  // 👇 Aplica a ordenação sobre os alunos já trazidos da API
+  const alunosOrdenados = [...alunos].sort((a, b) => {
+    const { campo, direcao } = ordenacao
+    const valorA = a[campo]
+    const valorB = b[campo]
+
+    if (typeof valorA === 'string') {
+      return direcao === 'asc'
+        ? valorA.localeCompare(valorB)
+        : valorB.localeCompare(valorA)
+    }
+    return direcao === 'asc' ? valorA - valorB : valorB - valorA
+  })
 
   function handleBusca(event) {
     const valor = event.target.value;
@@ -158,7 +152,26 @@ export default function TableTotalStudentsMath() {
     <div className="w-full bg-white rounded-lg shadow-[0px_4px_4px_0px_rgba(69,75,87,0.12)] overflow-hidden">
       
     {/* Barra de pesquisa */}
-    <SearchBar busca={busca} onBusca={handleBusca} />
+    <div className='grid grid-cols-2 text-end items-center'>
+        <div>
+            <SearchBar
+                busca={busca}
+                onBusca={(e) => {
+                    setBusca(e.target.value);
+                    setPagina(1);
+                }} />
+        </div>
+
+        <div className="pr-4">
+            <FilterSelect
+                filtros={filtros}
+                onAplicarFiltros={(novosFiltros) => {
+                  setFiltros(novosFiltros);
+                  setPagina(1);
+                }}
+            />
+        </div>
+    </div>
 
       {/* Cabeçalho da tabela */}
       <div className="flex items-center gap-2 px-5 py-2 bg-slate-50/75 border-b border-slate-200">
@@ -250,14 +263,15 @@ export default function TableTotalStudentsMath() {
       <div className="flex items-center justify-start gap-3 h-8 bg-white border-t border-gray-100">
         <button
           onClick={() => setPagina((p) => Math.max(1, p - 1))}
-          disabled={pagina === 1}
+          disabled={pagina === 1 || loading}
           className="p-1 rounded disabled:opacity-40"
         >
           <ChevronLeft size={16} />
         </button>
-        <span className="text-sm text-[var(--text-dark)]">{pagina} / 01</span>
+        <span className="text-sm text-[var(--text-dark)]">{pagina} de {totalPaginas}</span>
         <button
-          onClick={() => setPagina((p) => p + 1)}
+          onClick={() => setPagina((p) => Math.min(totalPaginas, p + 1))}
+          disabled={pagina >= totalPaginas || loading}
           className="p-1 rounded disabled:opacity-40"
         >
           <ChevronRight size={16} />

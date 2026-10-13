@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react'
 import { ChevronDown, ChevronLeft, ChevronRight, Pencil, Check, X, Filter } from 'lucide-react'
-import ButtonExport from '../../components/Buttons/Buttonexport'
 import HistoricoProvasCard from '../../components/HistoricoProvasCard/HistoricoProvasCard';
 import SearchBar from '../../components/SearchBar/SearchBar';
 import FilterSelect from '../../components/Filter/FilterSelect';
-
+import ButtonAddUser from '../Buttons/ButtonAddUser';
+import ButtonExport from '../../components/Buttons/Buttonexport';
+import * as XLSX from 'xlsx';
 import api from '../../services/api'
 
 const STATUS_STYLES = {
@@ -48,6 +49,46 @@ function RelatorioDataProvider({ render }) {
   })
   const [salvando, setSalvando] = useState(false)
   const [cursos, setCursos] = useState([])
+
+  const [exportando, setExportando] = useState(false);
+
+  async function exportarParaExcel() {
+  setExportando(true);
+  try {
+    // 1. Monta a URL com os FILTROS ATUAIS (mas sem paginação, para pegar todos filtrados)
+    let urlParams = `?`;
+    if (busca) urlParams += `&search=${busca}`;
+    if (filtros.status) urlParams += `&status=${filtros.status.toLowerCase()}`;
+    if (filtros.curso) urlParams += `&curso=${filtros.curso}`;
+    if (filtros.periodo) urlParams += `&ano_realizacao=${filtros.periodo}`;
+
+    // 2. Busca todos os dados baseados no filtro (usando sua função buscarTodos)
+    const dadosBrutos = await buscarTodos(`/alunos/${urlParams}`);
+
+    // 3. Formata os dados para ficarem bonitos no Excel
+    const dadosFormatados = dadosBrutos.map(aluno => ({
+      'RA': aluno.id,
+      'Nome': aluno.nome,
+      'Email': aluno.email,
+      'Status': aluno.aprovado_geral ? 'Aprovado' : 'Reprovado',
+      'Nota Matemática': aluno.nota_matematica || '-',
+      'Nota Português': aluno.nota_portugues || '-',
+      'Data de Aprovação': aluno.data_aprovacao_geral || '-'
+    }));
+
+    // 4. Cria e baixa o arquivo Excel
+    const worksheet = XLSX.utils.json_to_sheet(dadosFormatados);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Relatório");
+    XLSX.writeFile(workbook, "Relatorio_Alunos.xlsx");
+
+  } catch (erro) {
+    console.error("Erro ao exportar:", erro);
+    alert("Houve um erro ao exportar o relatório.");
+  } finally {
+    setExportando(false);
+  }
+}
 
   // Executa o carregamento sempre que a página ou o termo de busca mudarem
   useEffect(() => {
@@ -139,6 +180,7 @@ function RelatorioDataProvider({ render }) {
     setSalvando(true)
     try {
       const aluno = alunos.find((a) => a.id === id)
+      // Salva os dados básicos do aluno
       const playLoadAluno = {
         nome: valoresEdicao.nome,
         email: valoresEdicao.email,
@@ -147,17 +189,33 @@ function RelatorioDataProvider({ render }) {
         ra: valoresEdicao.ra || null,
         data_aprovacao_geral: valoresEdicao.dataProva || null,
       }
-      const { data: alunoAtualizado } = await api.patch(`/alunos/${id}/`, playLoadAluno)
-      console.log("Servidor salvou:", alunoAtualizado)
+      await api.patch(`/alunos/${id}/`, playLoadAluno)
       
+      // Trata a matrícula de forma inteligente
       let matriculaAtualizada = null
-      if (aluno?.matriculaId) {
-        const { data } = await api.patch(`/matricula/${aluno.matriculaId}/`, {
-          curso: valoresEdicao.curso,
-          periodo_no_semestre: valoresEdicao.periodoNoSemestre,
-        })
-        matriculaAtualizada = data
+      if (valoresEdicao.curso) {
+        if (aluno.matriculaId) {
+          // Se o aluno JÁ TINHA um curso, atualizamos (PATCH)
+          const { data } = await api.patch(`/matricula/${aluno.matriculaId}/`, {
+            curso: valoresEdicao.curso,
+          })
+          matriculaAtualizada = data
+        } else {
+          // Se o aluno NÃO TINHA curso (estava vazio), criamos o vínculo (POST)
+          const { data } = await api.post(`/matricula/`, {
+            aluno: id, 
+            curso: valoresEdicao.curso,
+            periodo_no_semestre: valoresEdicao.periodoNoSemestre || 1,
+            semestre_referencia: '2024.1', // 👈 Valor padrão para satisfazer o banco
+            turno: 'MANHA', // 👈 Valor padrão 
+          })
+          matriculaAtualizada = data
+        }
       }
+
+      // Pega o nome do curso para forçar a tabela a se atualizar visualmente na hora
+      const cursoSelecionado = cursos.find((c) => String(c.id) === String(valoresEdicao.curso))
+      const nomeDoCurso = cursoSelecionado ? (cursoSelecionado.nome || cursoSelecionado.name) : '-'
       
       setAlunos((prev) =>
         prev.map((a) =>
@@ -170,10 +228,9 @@ function RelatorioDataProvider({ render }) {
                 notaPortugues: valoresEdicao.notaPortugues || '-',
                 ra: valoresEdicao.ra || '-',
                 anoRealizacaoProva: valoresEdicao.dataProva || '',
+                matriculaId: matriculaAtualizada?.id ?? a.matriculaId,
                 cursoId: matriculaAtualizada?.curso ?? a.cursoId,
                 curso: matriculaAtualizada?.curso_nome ?? a.curso,
-                periodoNoSemestre: matriculaAtualizada?.periodo_no_semestre ?? a.periodoNoSemestre,
-                percentualCurso: matriculaAtualizada?.percentual_curso ?? a.percentualCurso,
               }
             : a
         )
@@ -181,22 +238,21 @@ function RelatorioDataProvider({ render }) {
       setEditandoId(null)
     } catch (err) {
       console.error("Erro completo da API:", err.response?.data);
-      
+
       const errorData = err.response?.data;
       let mensagem = 'Erro ao salvar alterações.';
       
       if (errorData) {
         if (typeof errorData === 'object') {
-          // Transforma o dicionário de erros do DRF em uma string legível
+          // Extrai as mensagens de erro do DRF e formata para o alert
           mensagem = Object.entries(errorData)
-            .map(([campo, msgs]) => `${campo}: ${Array.isArray(msgs) ? msgs.join(', ') : msgs}`)
-            .join(' | ');
+            .map(([campo, msgs]) => `${campo.toUpperCase()}: ${Array.isArray(msgs) ? msgs.join(', ') : msgs}`)
+            .join('\n');
         } else if (errorData.detail) {
           mensagem = errorData.detail;
         }
       }
-      
-      alert(mensagem);
+      alert(`O servidor recusou os dados:\n\n${mensagem}`);
     } finally {
       setSalvando(false);
     }
@@ -213,6 +269,8 @@ function RelatorioDataProvider({ render }) {
       salvando,
       busca,
       filtros,
+      exportando,
+      cursos,
     },
     actions: {
       setPagina,
@@ -223,6 +281,7 @@ function RelatorioDataProvider({ render }) {
       setBusca,
       carregarAlunos,
       setFiltros,
+      exportarParaExcel,
     }
   })
 }
@@ -231,15 +290,22 @@ export default function GeneralTable() {
   return (
     <RelatorioDataProvider 
       render={({ state, actions }) => {
-        const { alunos, loading, pagina, totalPaginas, editandoId, valoresEdicao, salvando, busca, filtros } = state;
-        const { setPagina, iniciarEdicao, cancelarEdicao, salvarEdicao, setBusca, setValoresEdicao, carregarAlunos, setFiltros } = actions;
+        const { alunos, loading, pagina, totalPaginas, editandoId, valoresEdicao, salvando, busca, filtros, exportando, cursos, } = state;
+        const { setPagina, iniciarEdicao, cancelarEdicao, salvarEdicao, setBusca, setValoresEdicao, carregarAlunos, setFiltros, exportarParaExcel } = actions;
 
         return (
           // 3. Contêiner raiz para prevenir vazamento de layout: max-w-full com grid isolado.
           <div className="w-full max-w-full grid grid-cols-1 overflow-hidden">
             <div className="w-full bg-white rounded-lg shadow-[0px_4px_4px_0px_rgba(69,75,87,0.12)] flex flex-col min-w-0">
               
-              <div className='grid grid-cols-2 text-end items-center'>
+              {/* Grid de botões, filtros e pesquisa */}
+              <div className='grid grid-cols-2'>
+                <div className='flex justify-start'>
+                  <ButtonAddUser onUsuarioCriado={carregarAlunos} />
+                </div>
+                <div className='flex justify-end'>
+                  <ButtonExport onClick={exportarParaExcel} loading={exportando} />
+                </div>
                 <div>
                   <SearchBar 
                     busca={busca} 
@@ -265,35 +331,35 @@ export default function GeneralTable() {
                 <div className="min-w-[1050px] w-full">
                   
                   {/* Cabeçalho da tabela */}
-                  <div className="flex items-center gap-2 px-3 py-2 bg-slate-50/75 border-b border-slate-200">
-                    <div className="w-8 text-center text-xs font-semibold text-gray-900 uppercase tracking-wide">
+                  <div className="flex items-center gap-2 px-5 py-2 bg-slate-50/75 border-b border-slate-200">
+                    <div className="w-8 text-start text-xs font-semibold text-gray-900 uppercase tracking-wide">
                       RA
                     </div>
-                    <div className="w-58 pl-6 flex items-center gap-1 text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                    <div className="w-58 flex items-start text-xs font-semibold text-gray-600 uppercase tracking-wide">
                       Nome
                     </div>
-                    <div className="w-50 text-xs text-start font-semibold text-gray-600 uppercase tracking-wide">
+                    <div className="w-75 text-xs text-start font-semibold text-gray-600 uppercase tracking-wide">
                       Email
                     </div>
-                    <div className="w-24 text-xs text-center font-semibold text-gray-600 uppercase tracking-wide">
+                    <div className="w-20 text-xs text-center font-semibold text-gray-600 uppercase tracking-wide">
                       nota Mat
                     </div>
-                    <div className="w-24 text-xs text-center font-semibold text-gray-600 uppercase tracking-wide">
+                    <div className="w-20 text-xs text-center font-semibold text-gray-600 uppercase tracking-wide">
                       nota Port
                     </div>
-                    <div className="w-22 flex items-center pl-2 text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                    <div className="w-26 flex justify-center text-xs text-center font-semibold text-gray-600 uppercase tracking-wide">
                       Status
                     </div>
-                    <div className="w-28 text-right mr-7 text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                    <div className="w-28 text-center text-xs font-semibold text-gray-600 uppercase tracking-wide">
                       Data Prova
                     </div>
-                    <div className="w-20 text-end mr-5 text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                    <div className="w-20 text-center text-xs font-semibold text-gray-600 uppercase tracking-wide">
                       Curso
                     </div>
-                    <div className="w-24 text-end text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                    <div className="w-24 text-center text-xs font-semibold text-gray-600 uppercase tracking-wide">
                       % de Curso
                     </div>
-                    <div className="w-16 text-end text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                    <div className="w-12 text-center text-xs font-semibold text-gray-600 uppercase tracking-wide">
                       Ações
                     </div>
                   </div>
@@ -307,10 +373,10 @@ export default function GeneralTable() {
 
                       return (
                         <div key={aluno.id} className="flex flex-col">
-                          <div className={`flex items-center gap-5 px-5 py-1 h-16 ${index % 2 === 1 ? 'bg-gray-50' : 'bg-white'}`}>
+                          <div className={`flex items-center gap-2 px-5 py-2 h-16 ${index % 2 === 1 ? 'bg-gray-50' : 'bg-white'}`}>
                             
                             {/* RA */}
-                            <div className="w-9 text-sm text-start font-medium text-[var(--text-dark)]">
+                            <div className="w-8 text-sm text-start font-medium text-[var(--text-dark)]">
                               {emEdicao ? (
                                 <input
                                   type="text"
@@ -325,7 +391,7 @@ export default function GeneralTable() {
                             </div>
 
                             {/* Nome */}
-                            <div className="w-48 text-sm text-start font-medium text-[var(--text-dark)]">
+                            <div className="w-58 text-sm text-start font-medium text-[var(--text-dark)]">
                               {emEdicao ? (
                                 <input
                                   type="text"
@@ -339,7 +405,7 @@ export default function GeneralTable() {
                             </div>
 
                             {/* Email */}
-                            <div className="w-50 text-sm text-start text-[var(--text-dark)]">
+                            <div className="w-75 text-sm text-start text-[var(--text-dark)]">
                               {emEdicao ? (
                                 <input
                                   type="email"
@@ -354,30 +420,81 @@ export default function GeneralTable() {
 
                             {/* Nota Matemática */}
                             <div className="w-20 text-sm text-center text-[var(--text-dark)]">
-                              <span className="truncate block">{aluno.notaMatematica}</span>
+                              {emEdicao ? (
+                                <input
+                                  type="text"
+                                  value={valoresEdicao.notaMatematica}
+                                  onChange={(e) => setValoresEdicao((prev) => ({ ...prev, notaMatematica: e.target.value }))}
+                                  className="w-full border border-slate-300 rounded px-1 py-1 text-sm text-center"
+                                />
+                              ) : (
+                                <span className="truncate block">{aluno.notaMatematica}</span>
+                              )}
                             </div>
 
                             {/* Nota Português */}
                             <div className="w-20 text-sm text-center text-[var(--text-dark)]">
-                              <span className="truncate block">{aluno.notaPortugues}</span>
+                              {emEdicao ? (
+                                <input
+                                  type="text"
+                                  value={valoresEdicao.notaPortugues}
+                                  onChange={(e) => setValoresEdicao((prev) => ({ ...prev, notaPortugues: e.target.value }))}
+                                  className="w-full border border-slate-300 rounded px-1 py-1 text-sm text-center"
+                                />
+                              ) : (
+                                <span className="truncate block">{aluno.notaPortugues}</span>
+                              )}
                             </div>
 
                             {/* Status */}
-                            <div className="w-18">
-                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLES[aluno.status]}`}>
+                            <div className="w-26">
+                              <span className={`flex items-center text-center justify-center rounded-full text-xs font-medium ${STATUS_STYLES[aluno.status]}`}>
                                 {aluno.status}
                               </span>
                             </div>
                             
                             {/* Data Prova */}
-                            <div className="w-22 text-end text-sm text-[var(--text-dark)]">
-                              {aluno.anoRealizacaoProva || '—'}
+                            <div className="w-28 text-center text-sm text-[var(--text-dark)]">
+                              {emEdicao ? (
+                                <input
+                                  type="text"
+                                  placeholder='EX: 2026.1'
+                                  value={valoresEdicao.dataProva}
+                                  onChange={(e) => setValoresEdicao((prev) => ({ ...prev, dataProva: e.target.value }))}
+                                  className="w-full border border-slate-300 rounded px-1 py-1 text-xs"
+                                />
+                              ) : (
+                                aluno.anoRealizacaoProva || '—'
+                              )}
                             </div>
-                            <div className="w-28 text-right text-sm text-[var(--text-dark)]">{aluno.curso}</div>
-                            <div className="w-24 text-right text-sm text-[var(--text-dark)]">{aluno.percentualCurso}%</div>
+
+                            {/* Curso */}
+                            <div className="w-20 text-center text-sm text-[var(--text-dark)]">
+                              {emEdicao ? (
+                                <select
+                                  value={valoresEdicao.curso}
+                                  onChange={(e) => setValoresEdicao((prev) => ({ ...prev, curso: e.target.value }))}
+                                  className="w-full border border-slate-300 rounded px-1 py-1 text-xs"
+                                >
+                                  <option value="">Selecione...</option>
+                                  {cursos.map((c) => (
+                                    <option key={c.id} value={c.id}>
+                                      {c.nome} {/* ou c.name, dependendo de como a sua API retorna o nome do curso */}
+                                    </option>
+                                  ))}
+                                </select>
+                              ) : (
+                                aluno.curso
+                              )}
+                            </div>
+
+                            {/* Percentual do curos */}
+                            <div className="w-24 text-center text-sm text-[var(--text-dark)]">
+                              {aluno.percentualCurso}%
+                            </div>
 
                             {/* Botões de Ação */}
-                            <div className="w-16 flex items-center justify-end gap-1">
+                            <div className="w-12 flex items-center justify-center gap-1">
                               {emEdicao ? (
                                 <>
                                   <button
@@ -398,6 +515,7 @@ export default function GeneralTable() {
                                   </button>
                                 </>
                               ) : (
+                                
                                 <button
                                   onClick={() => iniciarEdicao(aluno)}
                                   className="p-1 rounded text-slate-500 hover:bg-slate-100"
