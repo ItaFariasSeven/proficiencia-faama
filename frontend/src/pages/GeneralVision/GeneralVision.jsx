@@ -33,7 +33,7 @@ function RankingItem({ course, percentage }) {
   return (
     <div 
       className="px-1 py-0.5 rounded-sm flex items-center bg-gradient-to-r from-orange-300 to-orange-300/0"
-      style={{ width: `${Math.max(percentage * 2.2, 30)}%` }}
+      style={{ width: `${percentage}%`, minWidth: '35%' }}
     >
       <span className="text-[var(--text-dark)] text-sm font-semibold uppercase">{course}</span>
       <span className="text-[var(--text-dark)] text-xs font-medium uppercase ml-auto">{percentage}%</span>
@@ -78,7 +78,7 @@ export default function GeneralVision() {
         setLoading(false)
       }
     }
-    carregarDadosBanco()
+    carregarDadosDashboard()
   }, [])
 
   // Sempre que os dados brutos ou o SEMESTRE selecionado mudarem, recalculamos a tela

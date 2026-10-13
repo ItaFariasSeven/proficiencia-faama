@@ -7,6 +7,19 @@ import HistoricoProvasCard from '../../components/HistoricoProvasCard/HistoricoP
 import TablePorcent75 from '../../components/Table/TablePorcent75'
 import api from '../../services/api'
 
+// Função auxiliar para buscar todas as páginas da API
+async function buscarTodos(urlInicial) {
+  let url = urlInicial
+  let todos = []
+  while (url) {
+    const { data } = await api.get(url)
+    if (Array.isArray(data)) return data
+    todos = [...todos, ...(data.results || [])]
+    url = data.next ? data.next.replace(/^https?:\/\/[^/]+/, '') : null
+  }
+  return todos
+}
+
 function StatCard({ title, value, subvalue, children }) {
   return (
     <div className="flex-1 min-w-72 min-h-48 bg-white rounded-2xl shadow-md p-1 flex flex-col gap-5">
@@ -24,11 +37,54 @@ export default function Porcent75() {
 
   const [totalAlunos, setTotalAlunos] = useState(0)
   const [totalAprovados, setTotalAprovados] = useState(0)
+  const [totalPerto75, setTotalPerto75] = useState(0)
   const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    async function carregarDados() {
+      try {
+        // Busca alunos e matrículas ao mesmo tempo
+        const [alunos, matriculas] = await Promise.all([
+          buscarTodos('/alunos/'),
+          buscarTodos('/matricula/')
+        ]);
+
+        // Total de alunos
+        setTotalAlunos(alunos.length);
+
+        // Aprovados
+        const aprovados = alunos.filter((a) => a.aprovado_geral);
+        setTotalAprovados(aprovados.length);
+
+        // Alunos com 75% ou mais , Filtra matrículas com percentual >= 75
+        const matriculas75 = matriculas.filter((m) => parseFloat(m.percentual_curso) >= 75);
+        
+        // Pega IDs únicos de alunos para não contar o mesmo aluno duas vezes se ele tiver mais de uma matrícula >= 75
+        const idsAlunos75 = new Set(matriculas75.map(m => m.aluno));
+        
+        // Conta quantos alunos reais existem com esses IDs
+        const alunosCom75 = alunos.filter(a => idsAlunos75.has(a.id)).length;
+        setTotalPerto75(alunosCom75);
+
+      } catch (err) {
+        console.error("Erro ao carregar dados dos cards 75%:", err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    
+    carregarDados()
+  }, [])
 
   const percentualAprovados = totalAlunos > 0
     ? ((totalAprovados / totalAlunos) * 100).toFixed(1)
     : 0
+
+  const percentual75 = totalAlunos > 0
+    ? ((totalPerto75 / totalAlunos) * 100).toFixed(1)
+    : 0
+
+  if (loading) return <div className="p-5 text-sm text-gray-500 text-center mt-10">Carregando métricas...</div>
 
   return (
     <div className='text-end p-0'>
@@ -39,17 +95,16 @@ export default function Porcent75() {
           <StatCard
             title="Total de alunos que fizeram a prova"
             value={totalAlunos}
-            // subvalue={subvalue}
           />
           <StatCard
             title="Aprovados"
             value={`${percentualAprovados}%`}
-            // subvalue={totalAprovados}
+            subvalue={`${totalAprovados} alunos`}
           />
           <StatCard
             title="Alunos Próximos de 75% do curso"
-            // value={`${percentualPerto75}%`}
-            // subvalue={totalAprovados}
+            value={`${percentual75}%`}
+            subvalue={`${totalPerto75} alunos`}
           />
         </div>
 
