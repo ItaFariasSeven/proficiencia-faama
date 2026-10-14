@@ -8,6 +8,8 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
 
+from rest_framework.decorators import api_view
+
 from .models import ImportacaoPlanilha, HistoricoProva
 from .serializers import (ImportacaoPlanilhaSerializer,HistoricoProvaSerializer,UploadPlanilhaSerializer,)
 from .services import importar_planilha_padrao
@@ -35,7 +37,8 @@ class HistoricoProvaViewSet(viewsets.ModelViewSet):
     queryset = HistoricoProva.objects.select_related("aluno", "importacao").all()
     serializer_class = HistoricoProvaSerializer
     filter_backends = [filters.SearchFilter]
-    search_fields = ["aluno__nome", "aluno__email"]
+    search_fields = ["aluno__nome", "aluno__email", "aluno__ra"]
+
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -43,12 +46,24 @@ class HistoricoProvaViewSet(viewsets.ModelViewSet):
         semestre = self.request.query_params.get("semestre_prova")
         aluno_id = self.request.query_params.get("aluno")
 
+        status_param = self.request.query_params.get("status")
+        curso_param = self.request.query_params.get("curso")
+
         if disciplina:
             qs = qs.filter(disciplina=disciplina.upper())
         if semestre:
             qs = qs.filter(semestre_prova=semestre)
         if aluno_id:
             qs = qs.filter(aluno_id=aluno_id)
+
+        if status_param:
+            if status_param.lower() == "aprovado":
+                qs = qs.filter(nota__gte=7)
+            elif status_param.lower() == "reprovado":
+                qs = qs.filter(nota__lt=7)
+
+        if curso_param:
+            qs = qs.filter(matricula__curso__nome__icontains=curso_param)
 
         return qs   
         
@@ -93,3 +108,15 @@ class AlunoListView(APIView):
             })
             
         return Response(dados_formatados)
+
+@api_view(['GET'])
+def listar_periodos(request):
+    # Usamos o HistoricoProva, que já está importado lá no topo e não vai dar erro
+    # Isso vai listar os semestres exatos de quem fez a prova
+    periodos = HistoricoProva.objects.exclude(
+        semestre_prova__isnull=True
+    ).exclude(
+        semestre_prova=""
+    ).values_list('semestre_prova', flat=True).distinct().order_by('-semestre_prova')
+    
+    return Response(periodos)

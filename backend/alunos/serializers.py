@@ -25,13 +25,31 @@ class AlunoSerializer(serializers.ModelSerializer):
         )]
     )
 
+    curso_nome = serializers.SerializerMethodField()
+    percentual_curso = serializers.SerializerMethodField()
+
     class Meta:
         model = Aluno
         fields = [
             "id", "ra", "nome", "email", "aprovado_geral",'nota_matematica', 'nota_portugues',
             "data_aprovacao_geral", "criado_em", "atualizado_em",
+            "curso_nome", "percentual_curso"
         ]
         read_only_fields = ["criado_em", "atualizado_em"]
+
+    def get_curso_nome(self, obj):
+        # Pega a matrícula mais recente do aluno
+        ultima_matricula = obj.matriculas.order_by('-semestre_referencia').first()
+        if ultima_matricula and ultima_matricula.curso:
+            return ultima_matricula.curso.nome
+        return "-"
+
+    # FUNÇÃO QUE BUSCA A PORCENTAGEM NA TABELA DE MATRÍCULA
+    def get_percentual_curso(self, obj):
+        ultima_matricula = obj.matriculas.order_by('-semestre_referencia').first()
+        if ultima_matricula and ultima_matricula.percentual_curso:
+            return ultima_matricula.percentual_curso
+        return 0
 
 
 class AlunoDetalheSerializer(AlunoSerializer):

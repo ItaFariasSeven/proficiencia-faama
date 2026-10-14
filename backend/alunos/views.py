@@ -38,32 +38,25 @@ class AlunoViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = super().get_queryset()
-        status_param = self.request.query_params.get("status")
+
+        status_param = self.request.query_params.get('status')
+        curso_param = self.request.query_params.get('curso')
+        semestre_param = self.request.query_params.get('semestre')
+
         if status_param:
-            status_param = status_param.lower()
-            if status_param == "aprovado":
+            if status_param.lower() == 'aprovado':
                 qs = qs.filter(aprovado_geral=True)
-            elif status_param == "reprovado":
+            elif status_param.lower() == 'reprovado':
                 qs = qs.filter(aprovado_geral=False)
+                
+        # Cruza com as matrículas para filtrar curso e semestre
+        if curso_param:
+            qs = qs.filter(matriculas__curso__nome__icontains=curso_param).distinct()
+            
+        if semestre_param:
+            qs = qs.filter(matriculas__semestre_referencia=semestre_param).distinct()
+            
         return qs
-
-    # def perform_update(self, serializer):
-    #     aluno = serializer.save()
-
-    #     # Puxa os históricos usando a relação direta da sua model
-    #     meus_historicos = aluno.historico_provas.all()
-
-    #     # 1. Atualiza Matemática (busca por qualquer coisa que contenha 'matem')
-    #     if getattr(aluno, 'nota_matematica', None) is not None:
-    #         historicos_mat = meus_historicos.filter(disciplina__icontains='matem')
-    #         if historicos_mat.exists():
-    #             historicos_mat.update(nota=aluno.nota_matematica)
-
-    #     # 2. Atualiza Português (busca por qualquer coisa que contenha 'portug')
-    #     if getattr(aluno, 'nota_portugues', None) is not None:
-    #         historicos_port = meus_historicos.filter(disciplina__icontains='portug')
-    #         if historicos_port.exists():
-    #             historicos_port.update(nota=aluno.nota_portugues)
 
     @action(detail=True, methods=["get"])
     def historico(self, request, pk=None):
