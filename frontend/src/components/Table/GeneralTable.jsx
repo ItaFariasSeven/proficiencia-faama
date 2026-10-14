@@ -102,7 +102,7 @@ function RelatorioDataProvider({ render }) {
       if (busca) urlParams += `&search=${busca}`;
       if (filtros.status) urlParams += `&status=${filtros.status.toLowerCase()}`;
       if (filtros.curso) urlParams += `&curso=${filtros.curso}`;
-      if (filtros.periodo) urlParams += `&ano_realizacao=${filtros.periodo}`;
+      if (filtros.periodo) urlParams += `&semestre=${filtros.periodo}`;
 
       // 1 e 2. Paginação e Busca no Servidor
       const endpointAlunos = `/alunos/${urlParams}`;
@@ -332,7 +332,7 @@ export default function GeneralTable() {
                   
                   {/* Cabeçalho da tabela */}
                   <div className="flex items-center gap-2 px-5 py-2 bg-slate-50/75 border-b border-slate-200">
-                    <div className="w-8 text-start text-xs font-semibold text-gray-900 uppercase tracking-wide">
+                    <div className="w-12 text-start text-xs font-semibold text-gray-900 uppercase tracking-wide">
                       RA
                     </div>
                     <div className="w-58 flex items-start text-xs font-semibold text-gray-600 uppercase tracking-wide">
@@ -376,7 +376,7 @@ export default function GeneralTable() {
                           <div className={`flex items-center gap-2 px-5 py-2 h-16 ${index % 2 === 1 ? 'bg-gray-50' : 'bg-white'}`}>
                             
                             {/* RA */}
-                            <div className="w-8 text-sm text-start font-medium text-[var(--text-dark)]">
+                            <div className="w-12 text-sm text-start font-medium text-[var(--text-dark)]">
                               {emEdicao ? (
                                 <input
                                   type="text"

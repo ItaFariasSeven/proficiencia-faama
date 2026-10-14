@@ -61,7 +61,7 @@ function RelatorioDataProvider({ render }) {
       if (busca) urlParams += `&search=${busca}`;
       if (filtros.status) urlParams += `&status=${filtros.status.toLowerCase()}`;
       if (filtros.curso) urlParams += `&curso=${filtros.curso}`;
-      if (filtros.periodo) urlParams += `&ano_realizacao=${filtros.periodo}`;
+      if (filtros.periodo) urlParams += `&semestre=${filtros.periodo}`;
 
       // 1 e 2. Paginação e Busca no Servidor
       const endpointAlunos = `/alunos/${urlParams}`;

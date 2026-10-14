@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useSearchParams } from "react-router-dom";
-import SearchBar from '../../components/Searchbar/SearchBar';
+import SearchBar from '../../components/SearchBar/SearchBar';
 import HistoricoProvasCard from '../../components/HistoricoProvasCard/HistoricoProvasCard'
 import FilterSelect from '../../components/Filter/FilterSelect';
 import api from '../../services/api'
@@ -12,18 +12,6 @@ import api from '../../services/api'
 const STATUS_STYLES = {
   Aprovado: 'bg-green-100 text-green-700',
   Reprovado: 'bg-red-50 text-rose-600',
-}
-
-// 👇 Busca todas as páginas de um endpoint paginado do DRF
-async function buscarTodos(urlInicial) {
-  let url = urlInicial
-  let todos = []
-  while (url) {
-    const { data } = await api.get(url)
-    todos = [...todos, ...data.results]
-    url = data.next ? data.next.replace(/^https?:\/\/[^/]+/, '') : null
-  }
-  return todos
 }
 
 
@@ -36,8 +24,7 @@ export default function TableTotalStudentsGeneral() {
   const [filtros, setFiltros] = useState({ periodo: '', curso: '', status: '' })
   const [loading, setLoading] = useState(true)
 
-  const [searchParams, setSearchParams] = useSearchParams()
-  const busca = searchParams.get('busca') ?? ''
+  const [busca, setBusca] = useState('')
 
   useEffect(() => {
     carregarAlunos()
@@ -53,7 +40,7 @@ export default function TableTotalStudentsGeneral() {
       // APLICAR OS FILTROS NA API
       if (filtros.status) urlParams += `&status=${filtros.status.toLowerCase()}`;
       if (filtros.curso) urlParams += `&curso=${filtros.curso}`;
-      if (filtros.periodo) urlParams += `&ano_realizacao=${filtros.periodo}`;
+      if (filtros.periodo) urlParams += `&semestre=${filtros.periodo}`;
 
       const { data } = await api.get(`/alunos/${urlParams}`)
 
@@ -66,13 +53,13 @@ export default function TableTotalStudentsGeneral() {
 
       setAlunos(results.map((a) => ({
         id: a.id,
-        ra: a.id,
+        ra: a.ra || a.id,
         nome: a.nome,
         email: a.email,
         status: a.aprovado_geral ? 'Aprovado' : 'Reprovado',
-        anoAprovacao: a.data_aprovacao_geral ?? '',
-        curso: '-',
-        percentualCurso: 0,
+        anoAprovacao: a.data_aprovacao_geral || '—',
+        curso: a.curso_nome || '-', 
+        percentualCurso: a.percentual_curso ? Math.round(a.percentual_curso) : 0,
       })))
     } catch (err) {
       console.error(err)
@@ -83,9 +70,9 @@ export default function TableTotalStudentsGeneral() {
 
     // 👇 Aplica a ordenação sobre os alunos já trazidos da API
     const alunosOrdenados = [...alunos].sort((a, b) => {
-    const { campo, direcao } = ordenacao
-    const valorA = a[campo]
-    const valorB = b[campo]
+      const { campo, direcao } = ordenacao
+      const valorA = a[campo]
+      const valorB = b[campo]
 
     if (typeof valorA === 'string') {
       return direcao === 'asc'
@@ -95,34 +82,7 @@ export default function TableTotalStudentsGeneral() {
     return direcao === 'asc' ? valorA - valorB : valorB - valorA
   })
 
-  function handleBusca(event) {
-    const valor = event.target.value;
-
-    // Cria uma cópia dos parâmetros atuais.
-    const novosParametros = new URLSearchParams(searchParams);
-
-    // Se houver alguma coisa digitada, adiciona na URL.
-    if (valor.trim()) {
-        novosParametros.set(
-            "busca",
-            valor
-        );
-    } else {
-        // Se apagar a busca inteira, remove a busca da URL.
-        novosParametros.delete(
-            "busca"
-        );
-    }
-    // replace evita criar dezenas de entradas no histórico enquanto o usuário digita.
-    setSearchParams(
-        novosParametros,
-        {
-            replace: true
-        }
-    );
-  }
-
-  // 👇 Alterna a ordenação ao clicar no cabeçalho
+  // Alterna a ordenação ao clicar no cabeçalho
   function handleOrdenar(campo) {
     setOrdenacao((prev) => ({
       campo,
@@ -130,21 +90,6 @@ export default function TableTotalStudentsGeneral() {
     }))
   }
 
-  // 👇 Marca/desmarca um checkbox individual
-  function toggleSelecionado(id) {
-    setSelecionados((prev) =>
-      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
-    )
-  }
-
-  // 👇 Marca/desmarca todos de uma vez
-  function toggleTodos() {
-    setSelecionados(
-      selecionados.length === alunosOrdenados.length ? [] : alunosOrdenados.map((a) => a.id)
-    )
-  }
-
-  if (loading) return <div className="p-5 text-sm text-gray-500">Carregando...</div>
 
   return (
     <div className="w-full bg-white rounded-lg shadow-[0px_4px_4px_0px_rgba(69,75,87,0.12)] overflow-hidden">
@@ -173,11 +118,11 @@ export default function TableTotalStudentsGeneral() {
 
       {/* Cabeçalho da tabela */}
       <div className="flex items-center gap-2 px-5 py-2 bg-slate-50/75 border-b border-slate-200">
-        <div className="w-9 text-xs text-start font-semibold text-gray-900 uppercase tracking-wide">RA</div>
+        <div className="w-12 text-xs text-start font-semibold text-gray-900 uppercase tracking-wide">RA</div>
 
         <button
           onClick={() => handleOrdenar('nome')} 
-          className="w-52 flex items-center gap-1 text-xs font-semibold text-gray-600 uppercase tracking-wide"
+          className="w-58 flex items-center gap-1 text-xs font-semibold text-gray-600 uppercase tracking-wide"
         >
           Nome
           {ordenacao.campo === 'nome' ? (
@@ -225,9 +170,9 @@ export default function TableTotalStudentsGeneral() {
           }`}
         >
 
-          <div className="w-9 text-sm font-medium text-[var(--text-dark)]">{aluno.ra}</div>
+          <div className="w-12 text-sm font-medium text-[var(--text-dark)]">{aluno.ra}</div>
 
-          <div className="w-52 text-sm text-start font-medium text-[var(--text-dark)] truncate">{aluno.nome}</div>
+          <div className="w-58 text-sm text-start font-medium text-[var(--text-dark)] truncate">{aluno.nome}</div>
 
           <div className="w-75 text-sm text-start text-[var(--text-dark)] truncate">{aluno.email}</div>
 
@@ -250,7 +195,7 @@ export default function TableTotalStudentsGeneral() {
           <div className="w-24 text-center text-sm text-[var(--text-dark)]">{aluno.percentualCurso}%</div>
 
           {/* Histórico de provas por semestre */}
-          <div className="px-5 pb-3 bg-white">
+          <div className="bg-white">
             <HistoricoProvasCard alunoId={aluno.id} alunoNome={aluno.nome} />
           </div>
         </div>

@@ -11,27 +11,49 @@ import MenuItem from '@mui/material/MenuItem';
 import FormControl from '@mui/material/FormControl';
 import Select from '@mui/material/Select';
 import { Filter } from 'lucide-react';
+import api from '../../services/api';
 
 export default function FilterSelect({ filtros, onAplicarFiltros }) {
-  const cursosFaama = [
-    "Ads", "Pedagogia", "Pedagogia-EAD", "Enfermagem", "Direito", "Teologia", "Psicologia"
-  ]
   const [open, setOpen] = React.useState(false);
   
   // Estado local para os selects enquanto o modal está aberto
   const [localFiltros, setLocalFiltros] = React.useState(filtros || {periodo: '', curso: '', status: ''});
+
+  const [periodosDoBanco, setPeriodosDoBanco] = React.useState([]);
+  const [cursosDoBanco, setCursosDoBanco] = React.useState([]);
 
   // Sincroniza o estado local sempre que o modal abre
   React.useEffect(() => {
     if (filtros )setLocalFiltros(filtros);
   }, [filtros, open]);
 
+  // Busca no banco de dados assim que o componente é montado
+  React.useEffect(() => {
+    async function buscarOpcoes() {
+      try {
+        // 1. Corrige a rota para /proficiencia/periodos/
+        const { data: periodos } = await api.get('/proficiencia/periodos/');
+        console.log("✅ Períodos recebidos do banco:", periodos);
+        setPeriodosDoBanco(periodos);
+
+        // 2. Busca os cursos
+        const { data: respostaCursos } = await api.get('/cursos/');
+        const listaCursos = Array.isArray(respostaCursos) ? respostaCursos : (respostaCursos.results || []);
+        console.log("✅ Cursos recebidos do banco:", listaCursos);
+        setCursosDoBanco(listaCursos);
+        
+      } catch (error) {
+        console.error("❌ Erro ao buscar opções de filtro do BD:", error);
+      }
+    }
+    buscarOpcoes();
+  }, []);
+
   const handleChange = (campo) => (event) => {
     setLocalFiltros({ ...localFiltros, [campo]: event.target.value });
   };
 
   const handleClickOpen = () => setOpen(true);
-  
   const handleDialogClose = () => setOpen(false);
 
   const handleAplicar = () => {
@@ -87,8 +109,9 @@ export default function FilterSelect({ filtros, onAplicarFiltros }) {
                 input={<OutlinedInput label="periodo" />}
               >
                 <MenuItem value=""><em>Todos</em></MenuItem>
-                <MenuItem value="2026.1">2026.1</MenuItem>
-                <MenuItem value="2026.2">2026.2</MenuItem>
+                {periodosDoBanco.map((p) => (
+                  <MenuItem key={p} value={p}>{p}</MenuItem>
+                ))}
               </Select>
             </FormControl>
 
@@ -101,11 +124,14 @@ export default function FilterSelect({ filtros, onAplicarFiltros }) {
                 input={<OutlinedInput label="curso" />}
               >
                 <MenuItem value=""><em>Todos</em></MenuItem>
-                {cursosFaama.map((cursoNome) => (
-                  <MenuItem key={cursoNome} value={cursoNome}>
-                    {cursoNome}
-                  </MenuItem>
-                ))}
+                {cursosDoBanco.map((curso) => {
+                  const nomeDoCurso = curso.nome || curso.name;
+                  return(
+                    <MenuItem key={curso.id} value={nomeDoCurso}>
+                      {nomeDoCurso}
+                    </MenuItem>
+                  );
+                })}
               </Select>
             </FormControl>
 
