@@ -72,7 +72,11 @@ export default function GeneralVision() {
         // Extrai todos os semestres únicos que existem nas matrículas para o Select de filtro
         const semestresUnicos = [...new Set(matriculas.map(m => m.semestre_referencia).filter(Boolean))].sort().reverse();
         setSemestresDisponiveis(semestresUnicos);
-        } catch (err) {
+        // 👇 Padrão: último semestre
+        if (semestresUnicos.length > 0) {
+          setSemestreSelecionado(semestresUnicos[0]);
+        }
+      } catch (err) {
         console.error("Erro ao carregar banco de dados para o Dashboard:", err)
       } finally {
         setLoading(false)

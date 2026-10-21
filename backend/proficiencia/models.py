@@ -60,6 +60,20 @@ class HistoricoProva(models.Model):
             )
         ]
 
+    def nota_de_corte(self):
+        """
+        Retorna a nota mínima de aprovação conforme o semestre da prova.
+        Até 2025.2: 6.0 | A partir de 2026.1: 7.0
+        """
+        try:
+            ano, semestre = map(int, self.semestre_prova.split("."))
+        except (ValueError, AttributeError):
+            return 7.0  # padrão seguro se o semestre vier mal formatado
+
+        if (ano, semestre) <= (2025, 2):
+            return 6.0
+        return 7.0
+    
     def save(self, *args, **kwargs):
         # 1. Salva a nova nota da prova primeiro na base de dados
         super().save(*args, **kwargs)
@@ -73,22 +87,29 @@ class HistoricoProva(models.Model):
         elif self.disciplina == 'PORTUGUES':
             aluno.nota_portugues = self.nota
 
-        # 4. Regra de aprovação: Ambas as notas devem existir e ser >= 7
-        if aluno.nota_matematica is not None and aluno.nota_portugues is not None:
-            if aluno.nota_matematica >= 7 and aluno.nota_portugues >= 7:
-                aluno.aprovado_geral = True
-            else:
-                aluno.aprovado_geral = False
+        # 4. Verifica aprovação geral usando a nota de corte de cada disciplina
+        prova_mat = aluno.historico_provas.filter(
+            disciplina="MATEMATICA"
+        ).order_by("-semestre_prova").first()
+
+        prova_port = aluno.historico_provas.filter(
+            disciplina="PORTUGUES"
+        ).order_by("-semestre_prova").first()
+
+        if prova_mat and prova_port:
+            mat_aprovado = prova_mat.nota >= prova_mat.nota_de_corte()
+            port_aprovado = prova_port.nota >= prova_port.nota_de_corte()
+            aluno.aprovado_geral = mat_aprovado and port_aprovado
         else:
-            # Falta nota, fica reprovado/pendente
             aluno.aprovado_geral = False
 
-        # 5. Guarda o estado final no perfil do Aluno
+        # 5. Salva o aluno
         aluno.save()
+
 
     def __str__(self):
         return f"{self.aluno.nome} - {self.disciplina} - {self.semestre_prova}"
 
     @property
     def status_disciplina(self):
-        return "Aprovado" if self.nota >= 7 else "Reprovado"
+        return "Aprovado" if self.nota >= self.nota_de_corte() else "Reprovado"
