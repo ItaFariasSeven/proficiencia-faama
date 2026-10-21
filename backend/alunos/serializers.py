@@ -18,12 +18,12 @@ class HistoricoProvaSerializer(serializers.ModelSerializer):
 
 
 class AlunoSerializer(serializers.ModelSerializer):
-    email = serializers.EmailField(
-        validators=[UniqueValidator(
-            queryset=Aluno.objects.all(),
-            message="Já existe um aluno com esse e-mail."
-        )]
-    )
+    # email = serializers.EmailField(
+    #     validators=[UniqueValidator(
+    #         queryset=Aluno.objects.all(),
+    #         message="Já existe um aluno com esse e-mail."
+    #     )]
+    # )
 
     curso_nome = serializers.SerializerMethodField()
     percentual_curso = serializers.SerializerMethodField()
@@ -37,24 +37,35 @@ class AlunoSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["criado_em", "atualizado_em"]
 
-    def get_curso_nome(self, obj):
-        # Pega a matrícula mais recente do aluno
-        ultima_matricula = obj.matriculas.order_by('-semestre_referencia').first()
-        if ultima_matricula and ultima_matricula.curso:
-            return ultima_matricula.curso.nome
-        return "-"
+    def validate_email(self, value):
+        qs = Aluno.objects.filter(email=value)
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError("Já existe um aluno com esse e-mail.")
+        return value
 
-    # FUNÇÃO QUE BUSCA A PORCENTAGEM NA TABELA DE MATRÍCULA
+    def _ultima_matricula(self, obj):
+        if not hasattr(obj, '_cached_matricula'):
+            matriculas = list(obj.matriculas.all())
+            obj._cached_matricula = (
+                max(matriculas, key=lambda m: m.semestre_referencia or '')
+                if matriculas else None
+            )
+        return obj._cached_matricula
+
+    def get_curso_nome(self, obj):
+        m = self._ultima_matricula(obj)
+        return m.curso.nome if m and m.curso else '-'
+
     def get_percentual_curso(self, obj):
-        ultima_matricula = obj.matriculas.order_by('-semestre_referencia').first()
-        if ultima_matricula and ultima_matricula.percentual_curso:
-            return ultima_matricula.percentual_curso
-        return 0
+        m = self._ultima_matricula(obj)
+        return m.percentual_curso if m else 0
 
 
 class AlunoDetalheSerializer(AlunoSerializer):
     """Usado em retrieve: inclui histórico de provas."""
-    historico_provas = HistoricoProvaSerializer(many=True, read_only=True)
+    historico_provas = HistoricoProvaSerializer(source='historico_provas.all', many=True, read_only=True)
 
     class Meta(AlunoSerializer.Meta):
         fields = AlunoSerializer.Meta.fields + ["historico_provas"]

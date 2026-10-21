@@ -25,11 +25,11 @@ class AlunoViewSet(viewsets.ModelViewSet):
       DELETE /alunos/{id}/         -> remover
       GET    /alunos/{id}/historico/ -> apenas histórico de provas
     """
-    queryset = Aluno.objects.all()
+    queryset = Aluno.objects.prefetch_related('matriculas__curso').all()
     serializer_class = AlunoSerializer
 
     filter_backends = [filters.SearchFilter]
-    search_fields = ["nome", "email"]  # ?search=termo busca em ambos
+    search_fields = ["nome", "email", "ra"]  # ?search=termo busca em ambos
 
     def get_serializer_class(self):
         if self.action == "retrieve":

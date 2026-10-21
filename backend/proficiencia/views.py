@@ -1,7 +1,7 @@
 from django.http import JsonResponse
 from django.shortcuts import render
 from alunos.models import Aluno
-from notificacoes.services import enviar_avisos_prova
+from .services import enviar_avisos_prova
 import pandas as pd
 from rest_framework import viewsets, filters, status
 from rest_framework.views import APIView
@@ -11,8 +11,9 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.decorators import api_view
 
 from .models import ImportacaoPlanilha, HistoricoProva
-from .serializers import (ImportacaoPlanilhaSerializer,HistoricoProvaSerializer,UploadPlanilhaSerializer,)
+from .serializers import ImportacaoPlanilhaSerializer,HistoricoProvaSerializer,UploadPlanilhaSerializer
 from .services import importar_planilha_padrao
+from django.db.models import Q
 
 
 # Create your views here.
@@ -56,14 +57,22 @@ class HistoricoProvaViewSet(viewsets.ModelViewSet):
         if aluno_id:
             qs = qs.filter(aluno_id=aluno_id)
 
-        if status_param:
-            if status_param.lower() == "aprovado":
-                qs = qs.filter(nota__gte=7)
-            elif status_param.lower() == "reprovado":
-                qs = qs.filter(nota__lt=7)
-
         if curso_param:
             qs = qs.filter(matricula__curso__nome__icontains=curso_param)
+
+        if status_param:
+            sp = status_param.lower()
+            # Regra de corte: até 2025.2 = 6.0 | a partir de 2026.1 = 7.0
+            if sp == "aprovado":
+                qs = qs.filter(
+                    Q(semestre_prova__lte="2025.2", nota__gte=6) |
+                    Q(semestre_prova__gte="2026.1", nota__gte=7)
+                )
+            elif sp == "reprovado":
+                qs = qs.filter(
+                    Q(semestre_prova__lte="2025.2", nota__lt=6) |
+                    Q(semestre_prova__gte="2026.1", nota__lt=7)
+                )
 
         return qs   
         
@@ -86,28 +95,33 @@ class UploadPlanilhaView(APIView):
         return Response(resumo, status=status.HTTP_200_OK)
 
 
-class AlunoListView(APIView):
-    def get(self, request):
-        # Aqui busca os alunos e formata os dados para o frontend
-        alunos = Aluno.objects.all().values(
-            'id', 'ra', 'nome', 'email', 'nota_matematica', 'nota_portugues', 'aprovado_geral'
-        )
+# class AlunoListView(APIView):
+#     def get(self, request):
+#         # Aqui busca os alunos e formata os dados para o frontend
+#         alunos = Aluno.objects.all().values(
+#             'id', 'ra', 'nome', 'email', 'nota_matematica', 'nota_portugues', 'aprovado_geral'
+#         )
         
-        # Formatar a resposta para casar exatamente com o que o React espera
-        dados_formatados = []
-        for aluno in alunos:
-            dados_formatados.append({
-                "id": aluno["id"],
-                "ra": aluno["ra"],
-                "nome": aluno["nome"],
-                "email": aluno["email"],
-                "notaMatematica": aluno["nota_matematica"] or "-",
-                "notaPortugues": aluno["nota_portugues"] or "-",
-                "status": "Aprovado" if aluno["aprovado_geral"] else "Reprovado",
-                # Adicione os outros campos como 'curso' e 'percentualCurso' conforme sua lógica
-            })
+#         # Formatar a resposta para casar exatamente com o que o React espera
+#         dados_formatados = []
+#         for aluno in alunos:
+#             dados_formatados.append({
+#                 "id": aluno["id"],
+#                 "ra": aluno["ra"],
+#                 "nome": aluno["nome"],
+#                 "email": aluno["email"],
+#                 "notaMatematica": aluno["nota_matematica"] or "-",
+#                 "notaPortugues": aluno["nota_portugues"] or "-",
+#                 "status": "Aprovado" if aluno["aprovado_geral"] else "Reprovado",
+#             })
             
-        return Response(dados_formatados)
+#         return Response(dados_formatados)
+
+# class AlunoViewSet(viewsets.ModelViewSet):
+#     queryset = Aluno.objects.prefetch_related('matriculas__curso').all()
+#     serializer_class = AlunoSerializer
+#     filter_backends = [filters.SearchFilter]
+#     search_fields = ['nome', 'email', 'ra']
 
 @api_view(['GET'])
 def listar_periodos(request):
