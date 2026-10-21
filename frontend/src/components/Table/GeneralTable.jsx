@@ -53,42 +53,54 @@ function RelatorioDataProvider({ render }) {
   const [exportando, setExportando] = useState(false);
 
   async function exportarParaExcel() {
-  setExportando(true);
-  try {
-    // 1. Monta a URL com os FILTROS ATUAIS (mas sem paginação, para pegar todos filtrados)
-    let urlParams = `?`;
-    if (busca) urlParams += `&search=${busca}`;
-    if (filtros.status) urlParams += `&status=${filtros.status.toLowerCase()}`;
-    if (filtros.curso) urlParams += `&curso=${filtros.curso}`;
-    if (filtros.periodo) urlParams += `&ano_realizacao=${filtros.periodo}`;
+    setExportando(true);
+    try {
+      // 1. Monta a URL com os FILTROS ATUAIS (mas sem paginação, para pegar todos filtrados)
+      let urlParams = `?`;
+      if (busca) urlParams += `&search=${busca}`;
+      if (filtros.status) urlParams += `&status=${filtros.status.toLowerCase()}`;
+      if (filtros.curso) urlParams += `&curso=${filtros.curso}`;
+      if (filtros.periodo) urlParams += `&semestre=${filtros.periodo}`;
 
-    // 2. Busca todos os dados baseados no filtro (usando sua função buscarTodos)
-    const dadosBrutos = await buscarTodos(`/alunos/${urlParams}`);
+      // 2. Busca todos os dados baseados no filtro (usando sua função buscarTodos)
+      const dadosBrutos = await buscarTodos(`/alunos/${urlParams}`);
 
-    // 3. Formata os dados para ficarem bonitos no Excel
-    const dadosFormatados = dadosBrutos.map(aluno => ({
-      'RA': aluno.id,
-      'Nome': aluno.nome,
-      'Email': aluno.email,
-      'Status': aluno.aprovado_geral ? 'Aprovado' : 'Reprovado',
-      'Nota Matemática': aluno.nota_matematica || '-',
-      'Nota Português': aluno.nota_portugues || '-',
-      'Data de Aprovação': aluno.data_aprovacao_geral || '-'
-    }));
+      // 3. Formata os dados para ficarem bonitos no Excel
+      const dadosFormatados = dadosBrutos.map(aluno => ({
+        'RA': aluno.id,
+        'Nome': aluno.nome,
+        'Email': aluno.email,
+        'Status': aluno.aprovado_geral ? 'Aprovado' : 'Reprovado',
+        'Nota Matemática': aluno.nota_matematica || '-',
+        'Nota Português': aluno.nota_portugues || '-',
+        'Data de Aprovação': aluno.data_aprovacao_geral || '-'
+      }));
 
-    // 4. Cria e baixa o arquivo Excel
-    const worksheet = XLSX.utils.json_to_sheet(dadosFormatados);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Relatório");
-    XLSX.writeFile(workbook, "Relatorio_Alunos.xlsx");
+      // 4. Cria e baixa o arquivo Excel
+      const worksheet = XLSX.utils.json_to_sheet(dadosFormatados);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Relatório");
+      XLSX.writeFile(workbook, "Relatorio_Alunos.xlsx");
 
-  } catch (erro) {
-    console.error("Erro ao exportar:", erro);
-    alert("Houve um erro ao exportar o relatório.");
-  } finally {
-    setExportando(false);
+    } catch (erro) {
+      console.error("Erro ao exportar:", erro);
+      alert("Houve um erro ao exportar o relatório.");
+    } finally {
+      setExportando(false);
+    }
   }
-}
+
+  useEffect(() => {
+    async function carregarCursos() {
+      try {
+        const cursos = await buscarTodos('/cursos/')
+        setCursos(cursos)
+      } catch (err) {
+        console.error('Erro ao carregar cursos:', err)
+      }
+    }
+    carregarCursos()
+  }, [])
 
   // Executa o carregamento sempre que a página ou o termo de busca mudarem
   useEffect(() => {
@@ -98,52 +110,32 @@ function RelatorioDataProvider({ render }) {
   async function carregarAlunos() {
     setLoading(true)
     try {
-      let urlParams = `?page=${pagina}`;
-      if (busca) urlParams += `&search=${busca}`;
-      if (filtros.status) urlParams += `&status=${filtros.status.toLowerCase()}`;
-      if (filtros.curso) urlParams += `&curso=${filtros.curso}`;
-      if (filtros.periodo) urlParams += `&semestre=${filtros.periodo}`;
+      let urlParams = `?page=${pagina}`
+      if (busca) urlParams += `&search=${busca}`
+      if (filtros.status) urlParams += `&status=${filtros.status.toLowerCase()}`
+      if (filtros.curso) urlParams += `&curso=${filtros.curso}`
+      if (filtros.periodo) urlParams += `&semestre=${filtros.periodo}`
 
-      // 1 e 2. Paginação e Busca no Servidor
-      const endpointAlunos = `/alunos/${urlParams}`;
-      
-      const [respostaAlunos, todasMatriculas, todosCursos] = await Promise.all([
-        api.get(endpointAlunos), // Busca apenas 20 registros filtrados
-        buscarTodos('/matricula/'), // Alerta: Considere paginar/filtrar na API se a tabela crescer muito
-        buscarTodos('/cursos/'),
-      ])
+      const { data: dadosAlunos } = await api.get(`/alunos/${urlParams}`)
+      const results = Array.isArray(dadosAlunos) ? dadosAlunos : (dadosAlunos.results || [])
+      const totalRegistros = !Array.isArray(dadosAlunos) && dadosAlunos.count ? dadosAlunos.count : results.length
+      setTotalPaginas(Math.ceil(totalRegistros / 20) || 1)
 
-      const matriculaPorAluno = {}
-      todasMatriculas.forEach((m) => {
-        matriculaPorAluno[m.aluno] = m
-      })
-
-      setCursos(todosCursos)
-      
-      // O backend do Django DRF normalmente retorna 'count' com o total absoluto de registros
-      const dadosAlunos = respostaAlunos.data;
-      const results = Array.isArray(dadosAlunos) ? dadosAlunos : (dadosAlunos.results || []);
-      const totalRegistros = !Array.isArray(dadosAlunos) && dadosAlunos.count ? dadosAlunos.count : results.length;
-      setTotalPaginas(Math.ceil(totalRegistros / 20) || 1);
-
-      setAlunos(results.map((a) => {
-        const matricula = matriculaPorAluno[a.id]
-        return {
-          id: a.id,
-          ra: a.ra ?? '-',
-          nome: a.nome,
-          email: a.email,
-          status: a.aprovado_geral ? 'Aprovado' : 'Reprovado',
-          anoRealizacaoProva: a.data_aprovacao_geral ?? '',
-          notaMatematica: a.nota_matematica ?? '-',
-          notaPortugues: a.nota_portugues ?? '-',
-          matriculaId: matricula?.id ?? null,
-          cursoId: matricula?.curso ?? '',
-          curso: matricula?.curso_nome ?? '-',
-          periodoNoSemestre: matricula?.periodo_no_semestre ?? '',
-          percentualCurso: matricula?.percentual_curso ?? 0,
-        }
-      }))
+      setAlunos(results.map((a) => ({
+        id: a.id,
+        ra: a.ra ?? '-',
+        nome: a.nome,
+        email: a.email,
+        status: a.aprovado_geral ? 'Aprovado' : 'Reprovado',
+        anoRealizacaoProva: a.data_aprovacao_geral ?? '',
+        notaMatematica: a.nota_matematica ?? '-',
+        notaPortugues: a.nota_portugues ?? '-',
+        matriculaId: a.matricula_id ?? null,
+        cursoId: a.curso_id ?? '',
+        curso: a.curso_nome ?? '-',
+        periodoNoSemestre: a.periodo_no_semestre ?? '',
+        percentualCurso: a.percentual_curso ?? 0,
+      })))
     } catch (err) {
       console.error("Erro ao carregar alunos:", err)
     } finally {

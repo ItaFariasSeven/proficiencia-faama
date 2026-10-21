@@ -18,22 +18,18 @@ class HistoricoProvaSerializer(serializers.ModelSerializer):
 
 
 class AlunoSerializer(serializers.ModelSerializer):
-    # email = serializers.EmailField(
-    #     validators=[UniqueValidator(
-    #         queryset=Aluno.objects.all(),
-    #         message="Já existe um aluno com esse e-mail."
-    #     )]
-    # )
-
     curso_nome = serializers.SerializerMethodField()
     percentual_curso = serializers.SerializerMethodField()
+    matricula_id = serializers.SerializerMethodField()
+    curso_id = serializers.SerializerMethodField()
+    periodo_no_semestre = serializers.SerializerMethodField()
 
     class Meta:
         model = Aluno
         fields = [
-            "id", "ra", "nome", "email", "aprovado_geral",'nota_matematica', 'nota_portugues',
+            "id", "ra", "nome", "email", "aprovado_geral", "nota_matematica", "nota_portugues",
             "data_aprovacao_geral", "criado_em", "atualizado_em",
-            "curso_nome", "percentual_curso"
+            "curso_nome", "percentual_curso", "matricula_id", "curso_id", "periodo_no_semestre"
         ]
         read_only_fields = ["criado_em", "atualizado_em"]
 
@@ -61,6 +57,18 @@ class AlunoSerializer(serializers.ModelSerializer):
     def get_percentual_curso(self, obj):
         m = self._ultima_matricula(obj)
         return m.percentual_curso if m else 0
+
+    def get_matricula_id(self, obj):
+        m = self._ultima_matricula(obj)
+        return m.id if m else None
+
+    def get_curso_id(self, obj):
+        m = self._ultima_matricula(obj)
+        return m.curso.id if m and m.curso else ''
+
+    def get_periodo_no_semestre(self, obj):
+        m = self._ultima_matricula(obj)
+        return m.periodo_no_semestre if m else ''
 
 
 class AlunoDetalheSerializer(AlunoSerializer):

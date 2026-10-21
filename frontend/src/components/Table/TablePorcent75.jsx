@@ -49,60 +49,53 @@ function RelatorioDataProvider({ render }) {
   const [salvando, setSalvando] = useState(false)
   const [cursos, setCursos] = useState([])
 
-  // Executa o carregamento sempre que a página ou o termo de busca mudarem
+  // Carrega cursos uma única vez
   useEffect(() => {
-    carregarAlunos()    
+    async function carregarCursos() {
+      try {
+        const cursos = await buscarTodos('/cursos/')
+        setCursos(cursos)
+      } catch (err) {
+        console.error('Erro ao carregar cursos:', err)
+      }
+    }
+    carregarCursos()
+  }, [])
+  
+  // Carrega alunos sempre que página/busca/filtro mudar
+  useEffect(() => {
+    carregarAlunos()
   }, [pagina, busca, filtros])
 
   async function carregarAlunos() {
     setLoading(true)
     try {
-      let urlParams = `?page=${pagina}`;
-      if (busca) urlParams += `&search=${busca}`;
-      if (filtros.status) urlParams += `&status=${filtros.status.toLowerCase()}`;
-      if (filtros.curso) urlParams += `&curso=${filtros.curso}`;
-      if (filtros.periodo) urlParams += `&semestre=${filtros.periodo}`;
+      let urlParams = `?page=${pagina}`
+      if (busca) urlParams += `&search=${busca}`
+      if (filtros.status) urlParams += `&status=${filtros.status.toLowerCase()}`
+      if (filtros.curso) urlParams += `&curso=${filtros.curso}`
+      if (filtros.periodo) urlParams += `&semestre=${filtros.periodo}`
 
-      // 1 e 2. Paginação e Busca no Servidor
-      const endpointAlunos = `/alunos/${urlParams}`;
-      
-      const [respostaAlunos, todasMatriculas, todosCursos] = await Promise.all([
-        api.get(endpointAlunos), // Busca apenas 20 registros filtrados
-        buscarTodos('/matricula/'), // Alerta: Considere paginar/filtrar na API se a tabela crescer muito
-        buscarTodos('/cursos/'),
-      ])
+      const { data: dadosAlunos } = await api.get(`/alunos/${urlParams}`)
+      const results = Array.isArray(dadosAlunos) ? dadosAlunos : (dadosAlunos.results || [])
+      const totalRegistros = !Array.isArray(dadosAlunos) && dadosAlunos.count ? dadosAlunos.count : results.length
+      setTotalPaginas(Math.ceil(totalRegistros / 20) || 1)
 
-      const matriculaPorAluno = {}
-      todasMatriculas.forEach((m) => {
-        matriculaPorAluno[m.aluno] = m
-      })
-
-      setCursos(todosCursos)
-      
-      // O backend do Django DRF normalmente retorna 'count' com o total absoluto de registros
-      const dadosAlunos = respostaAlunos.data;
-      const results = Array.isArray(dadosAlunos) ? dadosAlunos : (dadosAlunos.results || []);
-      const totalRegistros = !Array.isArray(dadosAlunos) && dadosAlunos.count ? dadosAlunos.count : results.length;
-      setTotalPaginas(Math.ceil(totalRegistros / 20) || 1);
-
-      setAlunos(results.map((a) => {
-        const matricula = matriculaPorAluno[a.id]
-        return {
-          id: a.id,
-          ra: a.ra ?? '-',
-          nome: a.nome,
-          email: a.email,
-          status: a.aprovado_geral ? 'Aprovado' : 'Reprovado',
-          anoRealizacaoProva: a.data_aprovacao_geral ?? '',
-          notaMatematica: a.nota_matematica ?? '-',
-          notaPortugues: a.nota_portugues ?? '-',
-          matriculaId: matricula?.id ?? null,
-          cursoId: matricula?.curso ?? '',
-          curso: matricula?.curso_nome ?? '-',
-          periodoNoSemestre: matricula?.periodo_no_semestre ?? '',
-          percentualCurso: matricula?.percentual_curso ?? 0,
-        }
-      }))
+      setAlunos(results.map((a) => ({
+        id: a.id,
+        ra: a.ra ?? '-',
+        nome: a.nome,
+        email: a.email,
+        status: a.aprovado_geral ? 'Aprovado' : 'Reprovado',
+        anoRealizacaoProva: a.data_aprovacao_geral ?? '',
+        notaMatematica: a.nota_matematica ?? '-',
+        notaPortugues: a.nota_portugues ?? '-',
+        matriculaId: a.matricula_id ?? null,
+        cursoId: a.curso_id ?? '',
+        curso: a.curso_nome ?? '-',
+        periodoNoSemestre: a.periodo_no_semestre ?? '',
+        percentualCurso: a.percentual_curso ?? 0,
+      })))
     } catch (err) {
       console.error("Erro ao carregar alunos:", err)
     } finally {
