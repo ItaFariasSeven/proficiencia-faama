@@ -187,7 +187,7 @@ export default function TableTotalStudentsMath() {
           )}
         </button>
 
-        <div className="w-80 text-xs text-start font-semibold text-gray-600 uppercase tracking-wide">
+        <div className="w-70 text-xs text-start font-semibold text-gray-600 uppercase tracking-wide">
           Email
         </div>
 
@@ -240,7 +240,7 @@ export default function TableTotalStudentsMath() {
             >
               <div className="w-12 text-sm text-start font-medium text-[var(--text-dark)]">{prova.ra}</div>
               <div className="w-64 text-sm text-start font-medium text-[var(--text-dark)] truncate" title={prova.nome}>{prova.nome}</div>
-              <div className="w-80 text-sm text-start text-[var(--text-dark)] truncate" title={prova.email}>{prova.email}</div>
+              <div className="w-70 text-sm text-start text-[var(--text-dark)] truncate" title={prova.email}>{prova.email}</div>
 
               {/* Nota */}
               <div className="w-20 text-sm text-center text-[var(--text-dark)]">

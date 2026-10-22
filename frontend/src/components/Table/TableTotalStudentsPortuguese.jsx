@@ -188,7 +188,7 @@ export default function TableTotalStudentsPortuguese() {
           )}
         </button>
 
-        <div className="w-80 text-xs text-start font-semibold text-gray-600 uppercase tracking-wide">
+        <div className="w-70 text-xs text-start font-semibold text-gray-600 uppercase tracking-wide">
           Email
         </div>
 
@@ -241,7 +241,7 @@ export default function TableTotalStudentsPortuguese() {
             >
               <div className="w-12 text-sm text-start font-medium text-[var(--text-dark)]">{prova.ra}</div>
               <div className="w-64 text-sm text-start font-medium text-[var(--text-dark)] truncate">{prova.nome}</div>
-              <div className="w-80 text-sm text-start text-[var(--text-dark)] truncate">{prova.email}</div>
+              <div className="w-70 text-sm text-start text-[var(--text-dark)] truncate">{prova.email}</div>
 
               {/* Nota */}
               <div className="w-20 text-sm text-center text-[var(--text-dark)]">

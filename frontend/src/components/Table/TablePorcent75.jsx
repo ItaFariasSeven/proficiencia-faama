@@ -76,7 +76,7 @@ function RelatorioDataProvider({ render }) {
       if (filtros.curso) urlParams += `&curso=${filtros.curso}`
       if (filtros.periodo) urlParams += `&semestre=${filtros.periodo}`
 
-      const { data: dadosAlunos } = await api.get(`/alunos/${urlParams}`)
+      const { data: dadosAlunos } = await api.get(`/alunos/por-percentual/${urlParams}`)
       const results = Array.isArray(dadosAlunos) ? dadosAlunos : (dadosAlunos.results || [])
       const totalRegistros = !Array.isArray(dadosAlunos) && dadosAlunos.count ? dadosAlunos.count : results.length
       setTotalPaginas(Math.ceil(totalRegistros / 20) || 1)

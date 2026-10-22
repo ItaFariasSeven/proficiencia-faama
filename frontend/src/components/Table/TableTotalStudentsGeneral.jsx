@@ -60,6 +60,8 @@ export default function TableTotalStudentsGeneral() {
         anoAprovacao: a.data_aprovacao_geral || '—',
         curso: a.curso_nome || '-', 
         percentualCurso: a.percentual_curso ? Math.round(a.percentual_curso) : 0,
+        turno: a.turno ?? '',
+        turnoDisplay: a.turno_display ?? '-',
       })))
     } catch (err) {
       console.error(err)

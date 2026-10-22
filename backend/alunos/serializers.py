@@ -23,13 +23,16 @@ class AlunoSerializer(serializers.ModelSerializer):
     matricula_id = serializers.SerializerMethodField()
     curso_id = serializers.SerializerMethodField()
     periodo_no_semestre = serializers.SerializerMethodField()
+    turno = serializers.SerializerMethodField()
+    turno_display = serializers.SerializerMethodField()
 
     class Meta:
         model = Aluno
         fields = [
             "id", "ra", "nome", "email", "aprovado_geral", "nota_matematica", "nota_portugues",
             "data_aprovacao_geral", "criado_em", "atualizado_em",
-            "curso_nome", "percentual_curso", "matricula_id", "curso_id", "periodo_no_semestre"
+            "curso_nome", "percentual_curso", "matricula_id", "curso_id", "periodo_no_semestre",
+            "turno", "turno_display"
         ]
         read_only_fields = ["criado_em", "atualizado_em"]
 
@@ -69,6 +72,14 @@ class AlunoSerializer(serializers.ModelSerializer):
     def get_periodo_no_semestre(self, obj):
         m = self._ultima_matricula(obj)
         return m.periodo_no_semestre if m else ''
+
+    def get_turno(self, obj):
+        m = self._ultima_matricula(obj)
+        return m.turno if m else ''
+
+    def get_turno_display(self, obj):
+        m = self._ultima_matricula(obj)
+        return m.get_turno_display() if m else '-'
 
 
 class AlunoDetalheSerializer(AlunoSerializer):

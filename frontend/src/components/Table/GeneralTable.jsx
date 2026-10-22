@@ -135,6 +135,8 @@ function RelatorioDataProvider({ render }) {
         curso: a.curso_nome ?? '-',
         periodoNoSemestre: a.periodo_no_semestre ?? '',
         percentualCurso: a.percentual_curso ?? 0,
+        turno: a.turno ?? '',
+        turnoDisplay: a.turno_display ?? '-',
       })))
     } catch (err) {
       console.error("Erro ao carregar alunos:", err)
@@ -354,6 +356,7 @@ export default function GeneralTable() {
                     <div className="w-12 text-center text-xs font-semibold text-gray-600 uppercase tracking-wide">
                       Ações
                     </div>
+                    
                   </div>
 
                   {loading ? (

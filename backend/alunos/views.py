@@ -1,3 +1,4 @@
+from django.db.models import OuterRef, Subquery, Q
 from django.shortcuts import render
 from rest_framework import viewsets, filters, status
 from rest_framework.decorators import action
@@ -9,6 +10,8 @@ from django.urls import reverse_lazy
 from .models import Aluno
 from proficiencia.models import HistoricoProva
 from .serializers import AlunoSerializer, AlunoDetalheSerializer, HistoricoProvaSerializer
+from matricula.models import MatriculaSemestre 
+
 
 # Create your views here.
 
@@ -31,6 +34,45 @@ class AlunoViewSet(viewsets.ModelViewSet):
     filter_backends = [filters.SearchFilter]
     search_fields = ["nome", "email", "ra"]  # ?search=termo busca em ambos
 
+    @action(detail=False, methods=['get'], url_path='por-percentual')
+    def por_percentual(self, request):
+        """
+        GET /alunos/por-percentual/?search=joao&status=aprovado&curso=...&semestre=...
+        Lista alunos ordenados pelo percentual da matrícula mais recente,
+        ignorando quem já terminou (percentual >= 100).
+        """
+        # Subquery: percentual da matrícula mais recente de cada aluno
+        ultima_matricula = MatriculaSemestre.objects.filter(
+            aluno=OuterRef('pk')
+        ).order_by('-semestre_referencia').values('percentual_curso')[:1]
+
+        # Anota o percentual, filtra quem ainda não terminou e ordena
+        queryset = self.get_queryset().annotate(
+            percentual_recente=Subquery(ultima_matricula)
+        ).filter(
+            Q(percentual_recente__lt=100) | Q(percentual_recente__isnull=True)
+        ).filter(
+            aprovado_geral=False
+        ).order_by('-percentual_recente')
+
+        # Busca textual (nome/email/ra)
+        search = request.query_params.get('search')
+        if search:
+            queryset = queryset.filter(
+                Q(nome__icontains=search) |
+                Q(email__icontains=search) |
+                Q(ra__icontains=search)
+            )
+
+        # Paginação
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+
     def get_serializer_class(self):
         if self.action == "retrieve":
             return AlunoDetalheSerializer
@@ -44,9 +86,10 @@ class AlunoViewSet(viewsets.ModelViewSet):
         semestre_param = self.request.query_params.get('semestre')
 
         if status_param:
-            if status_param.lower() == 'aprovado':
+            sp = status_param.lower()
+            if sp == 'aprovado':
                 qs = qs.filter(aprovado_geral=True)
-            elif status_param.lower() == 'reprovado':
+            elif sp == 'reprovado':
                 qs = qs.filter(aprovado_geral=False)
                 
         # Cruza com as matrículas para filtrar curso e semestre
