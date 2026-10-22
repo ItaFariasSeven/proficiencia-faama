@@ -1,194 +1,252 @@
 # notificacoes/services.py
+import re
+import unicodedata
 import pandas as pd
 from decimal import Decimal
 from django.db import IntegrityError, transaction
+from difflib import SequenceMatcher
 from alunos.models import Aluno
 from cursos.models import Curso
 from .models import HistoricoProva, ImportacaoPlanilha
 from matricula.models import MatriculaSemestre
+from django.db.models import Q
+
+
+def classificar_aluno(dados_planilha):
+    nome = dados_planilha['nome']
+    email = dados_planilha['email']
+    ra = dados_planilha['ra']
+
+    # 1. Nome exato (sem diferenciar maiúsculas/minúsculas)
+    alunos_nome = Aluno.objects.filter(nome__iexact=nome)
+    if alunos_nome.count() == 1:
+        aluno = alunos_nome.first()
+        # Se RA ou e-mail também batem, vincula automaticamente
+        if (ra and aluno.ra == ra) or (email and aluno.email == email):
+            return {'acao': 'vincular', 'aluno_existente': aluno, 'candidatos': [], 'dados_planilha': dados_planilha}
+        # Só o nome bate: pede conferência (pode ser homônimo)
+        return {'acao': 'conferir', 'aluno_existente': aluno, 'candidatos': [aluno], 'dados_planilha': dados_planilha}
+
+    # Mais de um aluno com o mesmo nome -> obriga conferir
+    if alunos_nome.count() > 1:
+        return {'acao': 'conferir', 'aluno_existente': None, 'candidatos': list(alunos_nome), 'dados_planilha': dados_planilha}
+
+    # 2. Nome parecido (fuzzy)
+    candidatos = []
+    for aluno in buscar_candidatos_por_nome(nome, limite=10):
+        score = similaridade_nomes(aluno.nome, nome)
+        if score >= 0.85:
+            candidatos.append((aluno, score))
+
+    if candidatos:
+        candidatos.sort(key=lambda x: x[1], reverse=True)
+        return {
+            'acao': 'conferir',
+            'aluno_existente': None,
+            'candidatos': [c[0] for c in candidatos],
+            'dados_planilha': dados_planilha
+        }
+
+    # 3. RA exato (fallback)
+    if ra:
+        aluno = Aluno.objects.filter(ra=ra).first()
+        if aluno:
+            return {'acao': 'vincular', 'aluno_existente': aluno, 'candidatos': [], 'dados_planilha': dados_planilha}
+
+    # 4. E-mail exato (fallback)
+    if email:
+        aluno = Aluno.objects.filter(email=email).first()
+        if aluno:
+            return {'acao': 'vincular', 'aluno_existente': aluno, 'candidatos': [], 'dados_planilha': dados_planilha}
+
+    # 5. Não encontrou nada -> novo aluno
+    return {'acao': 'criar', 'aluno_existente': None, 'candidatos': [], 'dados_planilha': dados_planilha}
 
 
 
 
-
-def buscar_ou_criar_aluno(nome: str, email: str):
+def normalizar_nome(nome: str) -> str:
     """
-    Tenta encontrar o aluno pelo e-mail (chave mais confiável).
-    Se não encontrar, cria um novo cadastro.
-
-    Retorna: (aluno, foi_criado)
+    Padroniza o nome para comparação: maiúsculas, sem acentos,
+    sem pontuação e sem espaços duplos.
     """
-    aluno, foi_criado = Aluno.objects.get_or_create(
-        email=email,
-        defaults={"nome": nome}
+    nome = str(nome or '').strip().upper()
+    # Remove acentos
+    nome = ''.join(
+        c for c in unicodedata.normalize('NFD', nome)
+        if unicodedata.category(c) != 'Mn'
     )
-    return aluno, foi_criado
+    # Remove pontuação comum em nomes (hífen, apóstrofo)
+    nome = re.sub(r"[^\w\s]", " ", nome)
+    # Remove espaços duplos
+    nome = re.sub(r"\s+", " ", nome).strip()
+    return nome
 
 
-def importar_planilha_padrao(arquivo):
-    # Lê a aba principal do Excel
+def similaridade_nomes(a: str, b: str) -> float:
+    """Retorna um valor entre 0 e 1 indicando quão parecidos são os nomes."""
+    return SequenceMatcher(None, normalizar_nome(a), normalizar_nome(b)).ratio()
+
+
+def buscar_candidatos_por_nome(nome: str, limite=5):
+    """Busca alunos cujo nome normalizado contenha as mesmas palavras-chave."""
+    nome_norm = normalizar_nome(nome)
+    palavras = [p for p in nome_norm.split(' ') if len(p) > 2]
+
+    if not palavras:
+        return Aluno.objects.none()
+
+    # Usa Q para fazer OR entre as palavras
+    filtro = Q()
+    for palavra in palavras:
+        filtro |= Q(nome__icontains=palavra)
+
+    return Aluno.objects.filter(filtro)[:limite]
+
+
+
+def parsear_planilha_preview(arquivo):
+    """
+    Lê o Excel e retorna um preview com a classificação de cada linha.
+    Não salva nada no banco.
+    """
     df = pd.read_excel(arquivo)
-    
-    # Remove espaços em branco dos nomes das colunas para evitar erros bobos
     df.columns = df.columns.str.strip().str.upper()
 
-    # Cria o registro da importação
+    preview = []
+
+    for _, row in df.iterrows():
+        email = str(row.get('EMAIL', '')).strip()
+        if email.lower() == 'nan':
+            email =''
+
+        nome = str(row.get('NOME', '')).strip()
+        if not nome or nome.lower() == 'nan':
+            continue
+
+        ra_bruto = row.get('RA')
+        if pd.isna(ra_bruto) or str(ra_bruto).strip().lower() == 'nan' or str(ra_bruto).strip() == '':
+            ra = None
+        else:
+            ra = str(ra_bruto).replace('.0', '').strip()
+
+        nome_curso = str(row.get('CURSO', '')).strip()
+        semestre_ref = str(row.get('SEMESTRE_REFERENCIA', '')).strip()
+        turno_bruto = row.get('TURNO')
+        periodo = row.get('PERIODO_CURSO')
+
+        dados_planilha = {
+            'nome': nome,
+            'email': email,
+            'ra': ra,
+            'curso': nome_curso,
+            'semestre_referencia': semestre_ref,
+            'turno': str(turno_bruto).strip().upper() if pd.notna(turno_bruto) else 'MANHA',
+            'periodo': int(float(periodo)) if pd.notna(periodo) else 1,
+            'nota_matematica': str(row.get('NOTA_MATEMATICA', '')).strip().replace(',', '.'),
+            'nota_portugues': str(row.get('NOTA_PORTUGUES', '')).strip().replace(',', '.'),
+        }
+
+        classificacao = classificar_aluno(dados_planilha)
+        preview.append(classificacao)
+
+    return preview
+
+
+def salvar_importacao_confirmada(itens, arquivo_name):
+    """
+    Recebe os itens já revisados pelo frontend e salva no banco.
+    cada item deve conter:
+      - dados_planilha
+      - acao: 'criar' ou 'vincular'
+      - aluno_id (apenas quando acao='vincular')
+    """
     importacao = ImportacaoPlanilha.objects.create(
         origem="PADRAO",
-        nome_arquivo=arquivo.name,
-        semestre_referencia="MULTIPLOS" # Como a planilha pode ter vários, deixamos genérico
+        nome_arquivo=arquivo_name,
+        semestre_referencia="MULTIPLOS"
     )
 
-    alunos_criados = 0
-    provas_importadas = 0
-    erros_integridade =0
+    resumo = {"alunos_novos": 0, "provas_registradas": 0, "erros": 0, "vinculados": 0}
 
     with transaction.atomic():
-        for index, row in df.iterrows():
-            email = str(row.get('EMAIL', '')).strip()
-            if not email or email == 'nan':
-                continue # Pula linhas sem e-mail
-
-            nome = str(row.get('NOME', '')).strip()
-
-            ra_bruto = row.get('RA')
-            if pd.isna(ra_bruto) or str(ra_bruto).strip().lower() == 'nan' or str(ra_bruto).strip() == '':
-                ra = None
-            else:
-                # Se for número no excel (ex: 81379.0), converte pra string e tira o decimal
-                ra = str(ra_bruto).replace('.0', '').strip()
-
-            # 1. Busca ou Cria o Aluno
-            aluno = None
+        for item in itens:
             try:
-                # Este transaction.atomic interno cria um "Savepoint". 
-                # Se der erro aqui dentro, ele anula só esse aluno e continua o loop!
-                with transaction.atomic():
-                    # Tenta buscar pelo RA primeiro (chave mais forte)
-                    if ra:
-                        aluno = Aluno.objects.filter(ra=ra).first()
-                    
-                    # Se não achou pelo RA, tenta pelo Email
-                    if not aluno:
-                        aluno = Aluno.objects.filter(email=email).first()
+                dados = item['dados_planilha']
+                acao = item['acao']
 
-                    # Lógica de Criar ou Atualizar
-                    if aluno:
-                        atualizou = False
-                        # Atualiza o RA se a planilha tiver um e no banco estiver vazio/diferente
-                        if ra and aluno.ra != ra:
-                            aluno.ra = ra
-                            atualizou = True
-                        # Atualiza o e-mail se a planilha tiver o email mais recente
-                        if email and aluno.email != email:
-                            aluno.email = email
-                            atualizou = True
-                        
-                        if atualizou:
-                            aluno.save()
-                    else:
-                        # Nao achou por RA nem por email, cria novo!
-                        aluno = Aluno.objects.create(email=email, nome=nome, ra=ra)
-                        alunos_criados += 1
+                if acao == 'vincular':
+                    aluno = Aluno.objects.get(id=item['aluno_id'])
+                    resumo['vinculados'] += 1
+                else:
+                    aluno = Aluno.objects.create(
+                        nome=dados['nome'],
+                        email=dados['email'],
+                        ra=dados['ra']
+                    )
+                    resumo['alunos_novos'] += 1
 
-            except IntegrityError as e:
-                print(f"⚠️ Erro ao salvar aluno {nome} (RA: {ra}, Email: {email}): {e}")
-                erros_integridade += 1
-                continue # Pula para a próxima linha da planilha
+                # Atualiza RA/email se a planilha tiver dados mais recentes
+                if dados['ra'] and aluno.ra != dados['ra']:
+                    aluno.ra = dados['ra']
+                if dados['email'] and aluno.email != dados['email']:
+                    aluno.email = dados['email']
+                aluno.save()
 
-            # 2. Busca ou Cria o Curso
-            nome_curso = str(row.get('CURSO', '')).strip()
-            curso = None
-            if nome_curso and nome_curso.lower() != 'nan':
-                curso, _ = Curso.objects.get_or_create(
-                    nome=nome_curso,
-                    defaults={'duracao_periodos': 8} # Valor padrão se for curso novo
-                )
+                # Curso
+                curso = None
+                if dados['curso'] and dados['curso'].lower() != 'nan':
+                    curso, _ = Curso.objects.get_or_create(
+                        nome=dados['curso'],
+                        defaults={'duracao_periodos': 8}
+                    )
 
-            # 3. Resolve a Matrícula
-            semestre_ref = str(row.get('SEMESTRE_REFERENCIA', '')).strip()
-            if not semestre_ref or semestre_ref.lower() == 'nan':
-                continue
-            
-            turno_bruto = row.get('TURNO')
-            if pd.isna(turno_bruto) or str(turno_bruto).strip().lower() == 'nan' or str(turno_bruto).strip() == '':
-                turno = 'MANHA' # Se vier vazio no Excel, joga MANHA (ou NOTURNO) como padrão
-            else:
-                turno = str(turno_bruto).strip().upper()
-            periodo = row.get('PERIODO_CURSO')
-            
-            # Se periodo for vazio no excel, joga 1 como padrão
-            if pd.isna(periodo) or str(periodo).strip().lower() == 'nan': 
-                periodo = 1 
-            else:
-                periodo = int(float(periodo))
-
-            matricula = None
-            if semestre_ref and semestre_ref.lower() != 'nan':
-                
-                # Período que veio da planilha e divide pela duração oficial do curso no Banco de Dados
-                percentual_calculado = 0
+                # Percentual
+                percentual = 0
                 if curso and curso.duracao_periodos:
-                    percentual_calculado = round((periodo / curso.duracao_periodos) * 100, 2)
-                
+                    percentual = round((dados['periodo'] / curso.duracao_periodos) * 100, 2)
+
                 matricula, _ = MatriculaSemestre.objects.update_or_create(
                     aluno=aluno,
-                    semestre_referencia=semestre_ref,
+                    semestre_referencia=dados['semestre_referencia'],
                     defaults={
                         'curso': curso,
-                        'turno': turno,
-                        'periodo_no_semestre': periodo,
-                        'percentual_curso': percentual_calculado,
-                        'importacao': importacao
+                        'turno': dados['turno'],
+                        'periodo_no_semestre': dados['periodo'],
+                        'percentual_curso': percentual,
+                        'importacao': importacao,
                     }
                 )
 
-            # Salva Notas (Ignora se a célula no Excel estiver vazia)
-            nota_mat_str = str(row.get('NOTA_MATEMATICA', '')).strip().replace(',', '.')
-            if nota_mat_str and nota_mat_str.lower() != 'nan':
-                try:
-                    nota_mat = float(nota_mat_str) # Tenta converter para número
-                    HistoricoProva.objects.update_or_create(
-                        aluno=aluno,
-                        disciplina="MATEMATICA",
-                        semestre_prova=semestre_ref,
-                        defaults={
-                            'nota': nota_mat,
-                            'matricula': matricula,
-                            'origem_dados': 'PLANILHA',
-                            'importacao': importacao
-                        }
-                    )
-                    provas_importadas += 1
-                except ValueError:
-                    print(f"⚠️ Nota de Matemática ignorada para {nome}: '{nota_mat_str}' não é um número válido.")
+                # Notas
+                for campo, disciplina in [
+                    ('nota_matematica', 'MATEMATICA'),
+                    ('nota_portugues', 'PORTUGUES')
+                ]:
+                    nota_str = dados[campo]
+                    if nota_str and nota_str.lower() != 'nan':
+                        try:
+                            nota = float(nota_str)
+                            HistoricoProva.objects.update_or_create(
+                                aluno=aluno,
+                                disciplina=disciplina,
+                                semestre_prova=dados['semestre_referencia'],
+                                defaults={
+                                    'nota': nota,
+                                    'matricula': matricula,
+                                    'origem_dados': 'PLANILHA',
+                                    'importacao': importacao,
+                                }
+                            )
+                            resumo['provas_registradas'] += 1
+                        except ValueError:
+                            resumo['erros'] += 1
 
-            nota_port_str = str(row.get('NOTA_PORTUGUES', '')).strip().replace(',', '.')
-            if nota_port_str and nota_port_str.lower() != 'nan':
-                try:
-                    nota_port = float(nota_port_str) # Tenta converter para número
-                    HistoricoProva.objects.update_or_create(
-                        aluno=aluno,
-                        disciplina="PORTUGUES",
-                        semestre_prova=semestre_ref,
-                        defaults={
-                            'nota': nota_port,
-                            'matricula': matricula,
-                            'origem_dados': 'PLANILHA',
-                            'importacao': importacao
-                        }
-                    )
-                    provas_importadas += 1
-                except ValueError:
-                    print(f"⚠️ Nota de Português ignorada para {nome}: '{nota_port_str}' não é um número válido.")
+            except Exception as e:
+                print(f"Erro ao processar item {item}: {e}")
+                resumo['erros'] += 1
 
-    return {
-        "status": "sucesso",
-        "alunos_novos": alunos_criados,
-        "provas_registradas": provas_importadas,
-        "erros_pulados": erros_integridade,
-        "arquivo": arquivo.name
-    }
+    return resumo
 
 def enviar_avisos_prova(historico_prova):
     """

@@ -1,18 +1,13 @@
 from django.http import JsonResponse
 from django.shortcuts import render
-from alunos.models import Aluno
-from .services import enviar_avisos_prova
-import pandas as pd
 from rest_framework import viewsets, filters, status
-from rest_framework.views import APIView
-from rest_framework.response import Response
+from rest_framework.decorators import api_view, parser_classes
 from rest_framework.parsers import MultiPartParser, FormParser
-
-from rest_framework.decorators import api_view
+from rest_framework.response import Response
 
 from .models import ImportacaoPlanilha, HistoricoProva
-from .serializers import ImportacaoPlanilhaSerializer,HistoricoProvaSerializer,UploadPlanilhaSerializer
-from .services import importar_planilha_padrao
+from .serializers import ImportacaoPlanilhaSerializer, HistoricoProvaSerializer
+from .services import parsear_planilha_preview, salvar_importacao_confirmada
 from django.db.models import Q
 
 
@@ -75,53 +70,6 @@ class HistoricoProvaViewSet(viewsets.ModelViewSet):
                 )
 
         return qs   
-        
-
-
-class UploadPlanilhaView(APIView):
-    """
-    POST /proficiencia/upload-planilha/
-    multipart/form-data: arquivo
-    """
-    parser_classes = [MultiPartParser, FormParser]
-
-    def post(self, request):
-        serializer = UploadPlanilhaSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-
-        # Agora passamos apenas o arquivo. O Python descobre o resto lendo as colunas.
-        resumo = importar_planilha_padrao(serializer.validated_data["arquivo"])
-        
-        return Response(resumo, status=status.HTTP_200_OK)
-
-
-# class AlunoListView(APIView):
-#     def get(self, request):
-#         # Aqui busca os alunos e formata os dados para o frontend
-#         alunos = Aluno.objects.all().values(
-#             'id', 'ra', 'nome', 'email', 'nota_matematica', 'nota_portugues', 'aprovado_geral'
-#         )
-        
-#         # Formatar a resposta para casar exatamente com o que o React espera
-#         dados_formatados = []
-#         for aluno in alunos:
-#             dados_formatados.append({
-#                 "id": aluno["id"],
-#                 "ra": aluno["ra"],
-#                 "nome": aluno["nome"],
-#                 "email": aluno["email"],
-#                 "notaMatematica": aluno["nota_matematica"] or "-",
-#                 "notaPortugues": aluno["nota_portugues"] or "-",
-#                 "status": "Aprovado" if aluno["aprovado_geral"] else "Reprovado",
-#             })
-            
-#         return Response(dados_formatados)
-
-# class AlunoViewSet(viewsets.ModelViewSet):
-#     queryset = Aluno.objects.prefetch_related('matriculas__curso').all()
-#     serializer_class = AlunoSerializer
-#     filter_backends = [filters.SearchFilter]
-#     search_fields = ['nome', 'email', 'ra']
 
 @api_view(['GET'])
 def listar_periodos(request):
@@ -134,3 +82,65 @@ def listar_periodos(request):
     ).values_list('semestre_prova', flat=True).distinct().order_by('-semestre_prova')
     
     return Response(periodos)
+
+
+@api_view(['POST'])
+@parser_classes([MultiPartParser, FormParser])
+def upload_planilha_preview(request):
+    """
+    POST /proficiencia/upload-planilha/
+    Recebe o arquivo Excel e retorna o preview para conferência.
+    """
+    arquivo = request.FILES.get('arquivo')
+    if not arquivo:
+        return Response({'erro': 'Nenhum arquivo enviado.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    preview = parsear_planilha_preview(arquivo)
+
+    return Response({
+        'arquivo_name': arquivo.name,
+        'total': len(preview),
+        'para_conferir': len([p for p in preview if p['acao'] == 'conferir']),
+        'preview': [
+            {
+                'acao': p['acao'],
+                'aluno_existente': {
+                    'id': p['aluno_existente'].id,
+                    'nome': p['aluno_existente'].nome,
+                    'email': p['aluno_existente'].email,
+                    'ra': p['aluno_existente'].ra,
+                } if p['aluno_existente'] else None,
+                'candidatos': [
+                    {
+                        'id': c.id,
+                        'nome': c.nome,
+                        'email': c.email,
+                        'ra': c.ra,
+                    }
+                    for c in p['candidatos']
+                ],
+                'dados_planilha': p['dados_planilha'],
+            }
+            for p in preview
+        ]
+    })
+
+
+@api_view(['POST'])
+def confirmar_importacao(request):
+    """
+    POST /proficiencia/confirmar-importacao/
+    Recebe a lista revisada pelo frontend e salva no banco.
+    """
+    itens = request.data.get('itens', [])
+    arquivo_name = request.data.get('arquivo_name', 'planilha.xlsx')
+
+    if not itens:
+        return Response({'erro': 'Nenhum item para importar.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    resumo = salvar_importacao_confirmada(itens, arquivo_name)
+
+    return Response({
+        'status': 'sucesso',
+        'resumo': resumo,
+    })

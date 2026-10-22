@@ -1,209 +1,71 @@
 // Importar dados
-import UploadArea from '../../components/UploadArea/UploadArea'
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import api from '../../services/api'
-import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
-
-const STATUS_STYLES = {
-  Aprovado: 'bg-green-100 text-green-700',
-  Reprovado: 'bg-red-50 text-rose-600',
-}
+import UploadArea from '../../components/UploadArea/UploadArea'
+import ScreenConferenciaImport from '../../components/ConferenciaImport/ScreenConferenciaImport'
 
 export default function ImportData() {
-
-  const [disciplina, setDisciplina] = useState('MATEMATICA')
-  const [semestre, setSemestre] = useState('2026.1')
-  const [resultado, setResultado] = useState(null)
+  const [preview, setPreview] = useState(null)
+  const [resumoFinal, setResumoFinal] = useState(null)
   const [enviando, setEnviando] = useState(false)
   const [erro, setErro] = useState('')
 
   async function handleArquivo(file) {
-    // lógica de upload/parse do xlsx aqui
     setEnviando(true)
     setErro('')
-    setResultado(null)
+    setPreview(null)
+    setResumoFinal(null)
+
     try {
       const formData = new FormData()
       formData.append('arquivo', file)
-      formData.append('disciplina', disciplina)
-      formData.append('semestre', semestre)
 
       const { data } = await api.post(
         '/proficiencia/upload-planilha/',
         formData,
         { headers: { 'Content-Type': 'multipart/form-data' } }
       )
-      setResultado(data)
+
+      setPreview(data)
     } catch (err) {
-      setErro(err.response?.data?.detail || 'Erro ao enviar o arquivo.')
+      setErro(err.response?.data?.detail || err.response?.data?.erro || 'Erro ao enviar o arquivo.')
     } finally {
       setEnviando(false)
     }
   }
 
-  const [alunos, setAlunos] = useState([])
-  const [selecionados, setSelecionados] = useState([])
-  const [pagina, setPagina] = useState(1)
-  const [ordenacao, setOrdenacao] = useState({ campo: 'ra', direcao: 'asc' })
-  const [loading, setLoading] = useState(true)
-
-  const ITENS_POR_PAGINA = 6000
-
-  
-
-    useEffect(() => {
-      const fetchAlunos = async () => {
-        setLoading(true)
-        try {
-          const { data } = await api.get('/proficiencia/alunos/') 
-          setAlunos(data)
-        } catch (error) {
-          console.error("Falha ao buscar alunos", error)
-        } finally {
-          setLoading(false)
-        }
-      }
-      fetchAlunos()
-    }, [])
-
-  // Alterna a ordenação ao clicar no cabeçalho
-  function handleOrdenar(campo) {
-    setOrdenacao((prev) => ({
-      campo,
-      direcao: prev.campo === campo && prev.direcao === 'asc' ? 'desc' : 'asc',
-    }))
+  function handleConcluido(data) {
+    setResumoFinal(data.resumo)
+    setPreview(null)
   }
-
-  // 👇 Marca/desmarca um checkbox individual
-  function toggleSelecionado(id) {
-    setSelecionados((prev) =>
-      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
-    )
-  }
-
-  // 👇 Marca/desmarca todos de uma vez
-  function toggleTodos() {
-    setSelecionados(
-      selecionados.length === alunos.length ? [] : alunos.map((a) => a.id)
-    )
-  }
-
-  if (loading) return <div className="p-5 text-sm text-gray-500">Carregando...</div>
 
   return (
-    <div>
-      <div className="w-full p-6">
-        {/* <div className="flex">
-          <select value={disciplina} onChange={(e) => setDisciplina(e.target.value)} className='border rounded px-3 py-2'>
-            <option value="MATEMATICA">Matemática</option>
-            <option value="PORTUGUES">Português</option>
-          </select>
-          <input 
-            type='text'
-            value={semestre}
-            onChange={(e) => setSemestre(e.target.value)}
-            placeholder='Ex: 2026.1'
-            className='border rounded px-3 py-2'
-          />
-        </div> */}
+    <div className="w-full p-6 space-y-6">
+      {!preview && !resumoFinal && (
+        <UploadArea onArquivoSelecionado={handleArquivo} />
+      )}
 
-          <UploadArea onArquivoSelecionado={handleArquivo} />
+      {enviando && <p className='text-sm text-gray-500'>Enviando...</p>}
+      {erro && <p className='text-sm text-red-500'>{erro}</p>}
 
-          {enviando && <p className='text-sm text-gray-500'>Enviando...</p>}
-          {erro && <p className='text-sm text-red-500'>{erro}</p>}
-          {resultado && (
-            <p className='text-sm text-green-600'>
-              {resultado.alunos_novos} novos alunos, {resultado.provas_registradas} provas registradas.
-            </p>
-          )}
-      </div>
-      
-      <div className="w-full bg-white rounded-lg shadow-[0px_4px_4px_0px_rgba(69,75,87,0.12)] overflow-hidden">
-      {/* Cabeçalho da tabela */}
-      <div className="flex items-center gap-2 px-5 py-2 bg-slate-50/75 border-b border-slate-200">
-        <input
-            type="checkbox"
-            checked={selecionados.length === alunos.length && alunos.length > 0}
-            onChange={toggleTodos}
-            className="size-4 rounded-sm border border-neutral-300" />
-        <div className="w-8 text-center text-xs font-semibold text-gray-900 uppercase tracking-wide">RA</div>
-        <div className="w-58 pl-6 flex items-center gap-1 text-xs font-semibold text-gray-600 uppercase tracking-wide">
-          Nome
+      {preview && (
+        <ScreenConferenciaImport
+          preview={preview.preview}
+          arquivoName={preview.arquivo_name}
+          onConcluido={handleConcluido}
+        />
+      )}
+
+      {resumoFinal && (
+        <div className='p-4 bg-green-50 border border-green-200 rounded-lg'>
+          <p className='text-sm text-green-700 font-medium'>
+            Importação concluída com sucesso!
+          </p>
+          <p className='text-sm text-green-600'>
+            {resumoFinal.alunos_novos} novos alunos, {resumoFinal.provas_registradas} provas registradas, {resumoFinal.vinculados} vínculos.
+          </p>
         </div>
-        <div className="w-50 text-xs font-semibold text-gray-600 uppercase tracking-wide">
-          Email
-        </div>
-        <div className="w-25 text-xs font-semibold text-gray-600 uppercase tracking-wide">
-          nota Matematica
-        </div>
-        <div className="w-25 text-xs font-semibold text-gray-600 uppercase tracking-wide">
-          nota Português
-        </div>
-        <div className="w-28 flex items-center gap-1 text-xs font-semibold text-gray-600 uppercase tracking-wide">
-          Status
-        </div>
-        <div className="w-22 text-right mr-7 text-xs font-semibold text-gray-600 uppercase tracking-wide">
-          Data Prova
-        </div>
-        <div className="w-20 text-right mr-8 text-xs font-semibold text-gray-600 uppercase tracking-wide">
-          Curso
-        </div>
-        <div className="w-24 text-right text-xs font-semibold text-gray-600 uppercase tracking-wide">
-          % de Curso
-        </div>
-      </div>
-      {/* Linhas */}
-      {alunos.map((aluno, index) => (
-        <div
-          key={aluno.id}
-          className={`flex items-center gap-5 px-5 py-1 h-16 ${
-            index % 2 === 1 ? 'bg-gray-50' : 'bg-white'
-          }`}
-        >
-          <input
-            type="checkbox"
-            checked={selecionados.includes(aluno.id)}
-            onChange={() => toggleSelecionado(aluno.id)}
-            className="size-4 rounded-sm border border-neutral-300" />
-          <div className="w-9 text-sm font-medium text-[var(--text-dark)]">{aluno.ra}</div>
-          <div className="w-48 text-sm font-medium text-[var(--text-dark)] truncate">{aluno.nome}</div>
-          <div className="w-50 text-sm text-[var(--text-dark)] truncate">{aluno.email}</div>
-          <div className="w-20 text-sm text-[var(--text-dark)] truncate">{aluno.notaMatematica}</div>
-          <div className="w-20 text-sm text-[var(--text-dark)] truncate">{aluno.notaPortugues}</div>
-          <div className="w-12">
-            <span
-              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                STATUS_STYLES[aluno.status]
-              }`}
-            >
-              {aluno.status}
-            </span>
-          </div>
-          <div className="w-28 text-right text-sm text-[var(--text-dark)]">
-            {aluno.anoRealizacaoProva || '—'}
-          </div>
-          <div className="w-28 text-right text-sm text-[var(--text-dark)]">{aluno.curso}</div>
-          <div className="w-24 text-right text-sm text-[var(--text-dark)]">{aluno.percentualCurso}%</div>
-        </div>
-      ))}
-      {/* Paginação */}
-      <div className="flex items-center justify-start gap-3 h-8 bg-white border-t border-gray-100">
-        <button
-          onClick={() => setPagina((p) => Math.max(1, p - 1))}
-          disabled={pagina === 1}
-          className="p-1 rounded disabled:opacity-40"
-        >
-          <ChevronLeft size={16} />
-        </button>
-        <span className="text-sm text-[var(--text-dark)]">{pagina} / 01</span>
-        <button
-          onClick={() => setPagina((p) => p + 1)}
-          className="p-1 rounded disabled:opacity-40"
-        >
-          <ChevronRight size={16} />
-        </button>
-      </div>
-    </div>
+      )}
     </div>
   )
 }
