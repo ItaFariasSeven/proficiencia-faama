@@ -541,7 +541,7 @@ export default function GeneralTable() {
                 <button
                   onClick={() => setPagina((p) => Math.max(1, p - 1))}
                   disabled={pagina === 1 || loading}
-                  className="p-1 rounded disabled:opacity-40 hover:bg-slate-100 transition-colors"
+                  className="p-1 rounded disabled:opacity-40 hover:bg-slate-200 transition-colors"
                 >
                   <ChevronLeft size={16} />
                 </button>
@@ -549,7 +549,7 @@ export default function GeneralTable() {
                 <button
                   onClick={() => setPagina((p) => Math.min(totalPaginas, p + 1))}
                   disabled={pagina >= totalPaginas || loading}
-                  className="p-1 rounded disabled:opacity-40 hover:bg-slate-100 transition-colors"
+                  className="p-1 rounded disabled:opacity-40 hover:bg-slate-200 transition-colors"
                 >
                   <ChevronRight size={16} />
                 </button>
