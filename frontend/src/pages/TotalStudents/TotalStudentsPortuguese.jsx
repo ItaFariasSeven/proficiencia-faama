@@ -8,8 +8,7 @@ export default function TotalStudentsGeneral() {
 
 
   return (
-    <div className='text-end p-0'>
-
+    <div className='text-end p-0 h-dvh overflow-auto'>
       <TableTotalStudentsPortuguese></TableTotalStudentsPortuguese>
     </div>
       

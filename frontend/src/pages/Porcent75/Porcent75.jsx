@@ -88,7 +88,7 @@ export default function Porcent75() {
 
   return (
     <div className='text-end p-0'>
-      <div className="flex-col p-1">
+      <div className="flex-col p-1 h-dvh overflow-auto">
 
         {/* Linha 1: Cards de estatísticas */}
         <div className="flex flex-row gap-2 mb-1">

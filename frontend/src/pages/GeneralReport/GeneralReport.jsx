@@ -11,7 +11,7 @@ export default function GeneralReport() {
 
 
   return (
-    <div className='text-end p-0'>
+    <div className='text-end p-0 h-dvh overflow-auto'>
       <GeneralTable></GeneralTable>
     </div>
       

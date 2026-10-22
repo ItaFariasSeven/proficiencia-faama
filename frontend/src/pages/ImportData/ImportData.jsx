@@ -40,7 +40,7 @@ export default function ImportData() {
   }
 
   return (
-    <div className="w-full p-6 space-y-6">
+    <div className="w-full p-6 space-y-6 h-dvh overflow-auto">
       {!preview && !resumoFinal && (
         <UploadArea onArquivoSelecionado={handleArquivo} />
       )}
