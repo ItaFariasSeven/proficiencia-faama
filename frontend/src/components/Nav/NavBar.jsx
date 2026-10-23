@@ -15,7 +15,7 @@ function NavItem({ icon, label, active = false, hasChevron = false, expandido = 
         className={`w-full h-14 px-5 py-3 rounded-3xl flex items-center gap-3 cursor-pointer transition-colors
         ${destacado ? 'bg-slate-800' : 'hover:bg-slate-800/50'}`}
     >
-        {icon}
+        <div className={`${active ? 'text-amber-500' : 'text-[var(--text-light)]'}`}>{icon}</div>
         <span className={`flex-1 text-base text-start font-bold ${active ? 'text-amber-500' : 'text-[var(--text-light)]'}`}>
           {label}
         </span>
