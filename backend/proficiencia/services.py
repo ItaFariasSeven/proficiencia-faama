@@ -12,6 +12,79 @@ from matricula.models import MatriculaSemestre
 from django.db.models import Q
 
 
+def comparar_semestres(a: str, b: str) -> int:
+    """
+    Compara semestres no formato 'AAAA.N'.
+    Retorna -1 (a < b), 0 (a == b) ou 1 (a > b).
+    """
+    def to_tuple(s):
+        try:
+            ano, num = str(s).split('.')
+            return (int(ano), int(num))
+        except (ValueError, AttributeError):
+            return (0, 0)
+
+    ta, tb = to_tuple(a), to_tuple(b)
+    if ta < tb:
+        return -1
+    if ta > tb:
+        return 1
+    return 0
+
+
+def calcular_periodo(aluno, semestre_referencia: str, periodo_planilha=None) -> int:
+    """
+    Define o período do aluno para o semestre de referência.
+    Prioridade:
+      1. Período informado na planilha
+      2. Cálculo pelo histórico do aluno
+      3. Período 1 (novo aluno)
+    """
+    # 1. Se a planilha informou, usa ela
+    if periodo_planilha is not None:
+        return int(periodo_planilha)
+
+    # 2. Aluno novo
+    if not aluno or not aluno.pk:
+        return 1
+
+    ultima_matricula = aluno.matriculas.order_by('-semestre_referencia').first()
+    if not ultima_matricula:
+        return 1
+
+    # 3. Mesmo semestre ou anterior ao último cadastrado
+    if comparar_semestres(semestre_referencia, ultima_matricula.semestre_referencia) <= 0:
+        return ultima_matricula.periodo_no_semestre
+
+    # 4. Semestre posterior: avança se aprovado, senão repete
+    if aluno.aprovado_geral:
+        novo_periodo = ultima_matricula.periodo_no_semestre + 1
+        if ultima_matricula.curso and ultima_matricula.curso.duracao_periodos:
+            return min(novo_periodo, ultima_matricula.curso.duracao_periodos)
+        return novo_periodo
+
+    return ultima_matricula.periodo_no_semestre
+
+
+def atualizar_status_aprovacao_geral(aluno, semestre_referencia):
+    """
+    Atualiza aprovado_geral baseado nas notas de matemática e português
+    do semestre informado. Considera nota de corte 7.0.
+    """
+    NOTA_CORTE = 7.0
+
+    provas = HistoricoProva.objects.filter(aluno=aluno, semestre_prova=semestre_referencia)
+    notas = {p.disciplina: float(p.nota) for p in provas if p.nota is not None}
+
+    aprovado_mat = notas.get('MATEMATICA', 0) >= NOTA_CORTE
+    aprovado_port = notas.get('PORTUGUES', 0) >= NOTA_CORTE
+
+    aluno.aprovado_geral = aprovado_mat and aprovado_port
+    if aluno.aprovado_geral:
+        aluno.data_aprovacao_geral = semestre_referencia
+    aluno.save(update_fields=['aprovado_geral', 'data_aprovacao_geral'])
+
+
 def classificar_aluno(dados_planilha):
     nome = dados_planilha['nome']
     email = dados_planilha['email']
@@ -142,7 +215,7 @@ def parsear_planilha_preview(arquivo):
             'curso': nome_curso,
             'semestre_referencia': semestre_ref,
             'turno': str(turno_bruto).strip().upper() if pd.notna(turno_bruto) else 'MANHA',
-            'periodo': int(float(periodo)) if pd.notna(periodo) else 1,
+            'periodo': int(float(periodo)) if pd.notna(periodo) else None,
             'nota_matematica': str(row.get('NOTA_MATEMATICA', '')).strip().replace(',', '.'),
             'nota_portugues': str(row.get('NOTA_PORTUGUES', '')).strip().replace(',', '.'),
         }
@@ -201,10 +274,13 @@ def salvar_importacao_confirmada(itens, arquivo_name):
                         defaults={'duracao_periodos': 8}
                     )
 
-                # Percentual
+                # Calcula o período (planilha ou histórico)
+                periodo = calcular_periodo(aluno, dados['semestre_referencia'], dados.get('periodo'))
+
+                # Calcula percentual do curso
                 percentual = 0
                 if curso and curso.duracao_periodos:
-                    percentual = round((dados['periodo'] / curso.duracao_periodos) * 100, 2)
+                    percentual = round((periodo / curso.duracao_periodos) * 100, 2)
 
                 matricula, _ = MatriculaSemestre.objects.update_or_create(
                     aluno=aluno,
@@ -212,7 +288,7 @@ def salvar_importacao_confirmada(itens, arquivo_name):
                     defaults={
                         'curso': curso,
                         'turno': dados['turno'],
-                        'periodo_no_semestre': dados['periodo'],
+                        'periodo_no_semestre': periodo,
                         'percentual_curso': percentual,
                         'importacao': importacao,
                     }
@@ -242,11 +318,14 @@ def salvar_importacao_confirmada(itens, arquivo_name):
                         except ValueError:
                             resumo['erros'] += 1
 
+            # Atualiza status geral do aluno com base nas notas importadas
+            
+                atualizar_status_aprovacao_geral(aluno, dados['semestre_referencia'])
             except Exception as e:
                 print(f"Erro ao processar item {item}: {e}")
                 resumo['erros'] += 1
 
-    return resumo
+            return resumo
 
 def enviar_avisos_prova(historico_prova):
     """

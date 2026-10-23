@@ -4,7 +4,7 @@ from django.db import models
 class Aluno(models.Model):
     ra = models.CharField(max_length=20, unique=True, null=True, blank=True, db_index=True)
     nome = models.CharField(max_length=200)
-    email = models.EmailField(unique=True, db_index=True)
+    email = models.EmailField(unique=True, db_index=True, blank=True)
 
     aprovado_geral = models.BooleanField(default=False)
     data_aprovacao_geral = models.CharField(max_length=10, null=True, blank=True, help_text="Ex: 2026.1")
